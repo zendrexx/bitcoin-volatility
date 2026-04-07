@@ -5,7 +5,7 @@ import { InfoTooltip } from "@/components/ui/InfoTooltip";
 export function VaRPanel({ data }: { data: VarResponse }) {
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between text-xs font-medium tracking-widest text-zinc-400">
+      <div className="flex items-center text-xs font-medium tracking-widest text-zinc-400">
         <span>VALUE-AT-RISK (VAR)</span>
         <InfoTooltip label="VaR interpretation">
           Value-at-Risk summarizes how much loss is expected not to be exceeded with a given

@@ -1,9 +1,9 @@
 import type { HmmState } from "@/utils/mockData";
 
 function riskFromState(state: HmmState) {
-  if (state === "LOW") return "LOW RISK" as const;
-  if (state === "MEDIUM") return "MEDIUM RISK" as const;
-  return "HIGH RISK" as const;
+  if (state === "LOW") return "LOW VOLATILITY" as const;
+  if (state === "MEDIUM") return "MEDIUM VOLATILITY" as const;
+  return "HIGH VOLATILITY" as const;
 }
 
 function color(state: HmmState) {
@@ -39,7 +39,7 @@ export function RiskCard({ state }: { state: HmmState }) {
       </div>
 
       <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-xs text-zinc-400">
-        This dashboard classifies risk based on volatility regimes and VaR. It does not forecast future prices.
+        This dashboard classifies volatility based on regimes and VaR. It does not forecast future prices.
       </div>
     </div>
   );

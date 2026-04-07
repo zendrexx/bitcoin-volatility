@@ -46,7 +46,7 @@ export function DashboardLayout({ title, currentPrice, children }: Props) {
               </div>
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold text-zinc-50">
-                  Bitcoin Market Risk Monitor
+                  Bitcoin Market Volatility Monitor
                 </div>
                 <div className="truncate text-xs text-zinc-400">
                   Volatility regime classification (HMM) + VaR downside risk
