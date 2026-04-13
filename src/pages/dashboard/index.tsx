@@ -112,8 +112,8 @@ export default function DashboardPage() {
 
         <div className="lg:col-span-4">
           <Card
-            title="Risk Level"
-            subtitle="Overall market risk classification."
+            title="Volatility Level"
+            subtitle="Overall market volatility classification."
             right={
               <div className="text-xs text-zinc-500">
                 Volatility-based

@@ -15,13 +15,13 @@ export function LoginForm({ onSubmit, isLoading, error }: Props) {
       <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_25px_60px_-30px_rgba(0,0,0,0.8)] backdrop-blur">
         <div className="mb-6">
           <div className="text-xs font-medium tracking-widest text-zinc-400">
-            BITCOIN VOLATILITY RISK DASHBOARD
+            BITCOIN VOLATILITY DASHBOARD
           </div>
           <div className="mt-2 text-2xl font-semibold text-zinc-50">
             Sign in
           </div>
           <div className="mt-1 text-sm text-zinc-400">
-            Market risk classification, not price prediction.
+            Market volatility classification, not price prediction.
           </div>
         </div>
 
