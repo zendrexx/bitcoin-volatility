@@ -76,10 +76,6 @@ export function LoginForm({ onSubmit, isLoading, error }: Props) {
           </button>
         </form>
       </div>
-
-      <div className="mt-4 text-center text-xs text-zinc-500">
-        Demo login accepts any email/password.
-      </div>
     </div>
   );
 }

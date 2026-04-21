@@ -37,8 +37,7 @@ export default function LoginPage() {
                 Bitcoin Volatility Risk Dashboard
               </h1>
               <p className="mt-2 text-sm text-zinc-400">
-                Hidden Markov Model (HMM) regimes + Value-at-Risk (VaR) risk
-                measurement.
+                Hidden Markov Model (HMM) regimes
               </p>
             </div>
 
