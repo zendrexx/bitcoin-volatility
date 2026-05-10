@@ -8,7 +8,7 @@ def train_hmm(X, n_states=3):
     for seed in [0, 1, 2, 42, 100]:
         model = GaussianHMM(
             n_components=n_states,
-            covariance_type="diag",
+            covariance_type="diag",#independent training pa, palitan nalang "full" if gusto may correlation
             n_iter=1000,
             random_state=seed
         )
