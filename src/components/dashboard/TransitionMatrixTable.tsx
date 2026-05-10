@@ -1,4 +1,4 @@
-import type { HmmStateResponse } from "@/utils/mockData";
+import type { HmmStateResponse } from "@/utils/data";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 
 function fmt(n: number) {

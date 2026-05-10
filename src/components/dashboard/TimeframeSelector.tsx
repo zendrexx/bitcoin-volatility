@@ -1,4 +1,4 @@
-import type { Timeframe } from "@/utils/mockData";
+import type { Timeframe } from "@/utils/data";
 
 type Props = {
   value: Timeframe;
@@ -7,8 +7,8 @@ type Props = {
 
 const options: { label: string; value: Timeframe }[] = [
   { label: "5 Minute", value: "5m" },
-  { label: "10 Minute", value: "10m" },
   { label: "15 Minute", value: "15m" },
+  { label: "30 Minute", value: "30m" },
 ];
 
 export function TimeframeSelector({ value, onChange }: Props) {

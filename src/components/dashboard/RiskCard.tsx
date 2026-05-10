@@ -1,4 +1,4 @@
-import type { HmmState } from "@/utils/mockData";
+import type { HmmState } from "@/utils/data";
 
 function riskFromState(state: HmmState) {
   if (state === "LOW") return "LOW VOLATILITY" as const;

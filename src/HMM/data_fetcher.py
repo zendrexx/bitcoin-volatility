@@ -7,9 +7,9 @@ BASE_URL = "https://api.binance.com/api/v3/klines"
 
 SYMBOL = "BTCUSDT"
 INTERVALS = ["5m", "15m", "30m"]
-LIMIT = 1000  # max per request
+LIMIT = 1000  #max per request
 
-# 1 year range
+#1 year range
 end_time = datetime.utcnow()
 start_time = end_time - timedelta(days=365)
 

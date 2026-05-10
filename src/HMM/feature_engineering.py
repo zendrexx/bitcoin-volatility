@@ -6,7 +6,7 @@ def add_features(df):
 
 
     df["volatility"] = df["log_return"].rolling(10).std()#absolute return
-
+    
     df = df.dropna()#remove Nan, walang prev row ang first row
 
     X = np.column_stack([#return1, volatility1

@@ -6,18 +6,19 @@ def load_binance_json(filepath):#pass 5,15,30
         data = json.load(f)
 
     df = pd.DataFrame(data, columns=[#base sa binibigay ni binance to doon sa json
-        "time",
+        "time",#open time
         "open",
         "high",
         "low",
         "close",
-        "volume",
+        "volume",#total btc traded during interval
         "close_time",
-        "qav",
-        "trades",
-        "tbbav",
-        "tbqav",
+        "qav",#Quote Asset Volume, Total traded value in quote currency
+        "trades",#Number of Trades, Total executed trades during interval
+        "tbbav",#Taker Buy Base Asset Volume, Amount bought by aggressive buyers
+        "tbqav",#Taker Buy Quote Asset Volume,Value of aggressive buy orders in USDT
         "ignore"
+        
     ])
 
     df["time"] = pd.to_datetime(df["time"], unit="ms")

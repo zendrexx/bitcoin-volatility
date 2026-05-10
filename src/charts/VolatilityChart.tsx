@@ -8,7 +8,7 @@ import {
   YAxis,
   Bar,
 } from "recharts";
-import type { VolPoint } from "@/utils/mockData";
+import type { VolPoint } from "@/utils/data";
 import { formatTime } from "@/utils/format";
 
 function TooltipContent({

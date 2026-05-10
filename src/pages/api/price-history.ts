@@ -1,9 +1,16 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { generatePriceHistory, parseTimeframe } from "@/utils/mockData";
+import { parseTimeframe } from "@/utils/data";
+import { loadDataset } from "@/utils/dataset";
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   const tf = parseTimeframe(req.query.timeframe);
-  const items = generatePriceHistory(tf, 240);
-  res.status(200).json(items);
-}
 
+  const data = loadDataset(tf);
+
+  res.status(200).json(
+    data.map(d => ({
+      timestamp: d.timestamp,
+      price: d.close
+    }))
+  );
+}

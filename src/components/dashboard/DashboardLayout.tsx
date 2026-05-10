@@ -1,7 +1,6 @@
 import Head from "next/head";
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/router";
-import { getSession, isAuthenticated, logout } from "@/auth/session";
+
 import { formatUSD } from "@/utils/format";
 
 type Props = {
@@ -11,19 +10,22 @@ type Props = {
 };
 
 export function DashboardLayout({ title, currentPrice, children }: Props) {
-  const router = useRouter();
-  const [now, setNow] = useState(() => new Date());
+
+  const [now, setNow] = useState<Date | null>(null);
+
+ 
 
   useEffect(() => {
-    if (!isAuthenticated()) router.replace("/login");
-  }, [router]);
+  setNow(new Date());
 
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(new Date()), 1000);
-    return () => window.clearInterval(id);
-  }, []);
+  const id = window.setInterval(() => {
+    setNow(new Date());
+  }, 1000);
 
-  const session = useMemo(() => getSession(), []);
+  return () => window.clearInterval(id);
+}, []);
+
+
 
   return (
     <>
@@ -49,7 +51,7 @@ export function DashboardLayout({ title, currentPrice, children }: Props) {
                   Bitcoin Market Volatility Monitor
                 </div>
                 <div className="truncate text-xs text-zinc-400">
-                  Volatility regime classification (HMM) + VaR downside risk
+                  Volatility regime classification (HMM)
                 </div>
               </div>
             </div>
@@ -63,30 +65,20 @@ export function DashboardLayout({ title, currentPrice, children }: Props) {
               </div>
 
               <div className="hidden rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200 sm:block">
-                {now.toLocaleTimeString(undefined, {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  second: "2-digit",
-                })}
-              </div>
+                  {now
+                    ? now.toLocaleTimeString(undefined, {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                      })
+                    : "--:--:--"}
+                </div>
 
-              <button
-                onClick={() => {
-                  logout();
-                  router.push("/login");
-                }}
-                className="h-10 rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-zinc-200 transition hover:bg-white/10"
-              >
-                Logout
-              </button>
+             
             </div>
           </div>
 
-          {session?.email ? (
-            <div className="relative mx-auto max-w-7xl px-4 pb-3 text-xs text-zinc-500 sm:px-6">
-              Signed in as {session.email}
-            </div>
-          ) : null}
+ 
         </header>
 
         <main className="relative mx-auto max-w-7xl px-4 py-6 sm:px-6">

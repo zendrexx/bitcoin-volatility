@@ -5,7 +5,6 @@ import { TimeframeSelector } from "@/components/dashboard/TimeframeSelector";
 import { PriceChart } from "@/charts/PriceChart";
 import { VolatilityChart } from "@/charts/VolatilityChart";
 import { HMMStatePanel } from "@/components/dashboard/HMMStatePanel";
-import { VaRPanel } from "@/components/dashboard/VaRPanel";
 import { TransitionMatrixTable } from "@/components/dashboard/TransitionMatrixTable";
 import { RiskCard } from "@/components/dashboard/RiskCard";
 import { apiGet } from "@/utils/api";
@@ -15,52 +14,99 @@ import type {
   Timeframe,
   VarResponse,
   VolPoint,
-} from "@/utils/mockData";
+} from "@/utils/data";
 
-const TF_OPTIONS: Timeframe[] = ["5m", "10m", "15m"];
-
+const TF_OPTIONS: Timeframe[] = ["5m", "15m", "30m"];
+type Candle = {
+  timestamp: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  state: number | null;
+  log_return?: number | null;   
+  volatility?: number | null;   
+};
 export default function DashboardPage() {
   const [timeframe, setTimeframe] = useState<Timeframe>("5m");
-  const [prices, setPrices] = useState<PricePoint[]>([]);
+  const [prices, setPrices] = useState<Candle[]>([]);
   const [vol, setVol] = useState<VolPoint[]>([]);
   const [hmm, setHmm] = useState<HmmStateResponse | null>(null);
   const [varData, setVarData] = useState<VarResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+const DISPLAY_LIMIT = 70;
 
-  const currentPrice = useMemo(() => prices.at(-1)?.price ?? null, [prices]);
+const visibleData = prices.slice(-DISPLAY_LIMIT);
+const currentPrice = prices.length
+  ? prices[prices.length - 1].close
+  : null;
+useEffect(() => {
+  let cancelled = false;
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const params = { timeframe };
-        const [p, v, h, r] = await Promise.all([
-          apiGet<PricePoint[]>("/api/price-history", params),
-          apiGet<VolPoint[]>("/api/volatility", params),
-          apiGet<HmmStateResponse>("/api/hmm-state", params),
-          apiGet<VarResponse>("/api/var", params),
-        ]);
-        if (cancelled) return;
-        setPrices(p);
-        setVol(v);
-        setHmm(h);
-        setVarData(r);
-      } catch (e) {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "Failed to load data.");
-      } finally {
-        if (!cancelled) setLoading(false);
+  async function load() {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const data = await apiGet<any[]>("/api/dataset", { timeframe });
+
+      if (cancelled) return;
+
+      if (!data || data.length === 0) {
+        throw new Error("Empty dataset received");
       }
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [timeframe]);
 
+      setPrices(
+          data.map((d) => ({
+            timestamp: d.timestamp,
+            open:      d.open,
+            high:      d.high,
+            low:       d.low,
+            close:     d.close, 
+            state:     d.state ?? null,
+            log_return: d.log_return ?? null,
+            volatility: d.volatility ?? null,
+          }))
+        );
+
+        // ✅ Keep volatility fields for VolatilityChart
+        setVol(
+          data.map((d) => ({
+            timestamp:          d.timestamp,
+            log_return:         d.log_return      ?? null,
+            rolling_volatility: d.volatility      ?? null,
+          }))
+        );
+
+      const last = data.at(-1);
+
+      if (!last) throw new Error("No latest data point");
+
+      setHmm({
+        current_state: last.state,
+        probabilities: last.probabilities ?? {
+          low: 0,
+          medium: 0,
+          high: 0,
+        },
+        transition_matrix: [],
+      });
+
+    } catch (err: any) {
+      console.error("Dataset load error:", err);
+      setError(err.message ?? "Failed to load data");
+    } finally {
+      if (!cancelled) setLoading(false);
+    }
+  }
+
+  load();
+
+  return () => {
+    cancelled = true;
+  };
+}, [timeframe]);
   return (
     <DashboardLayout title="Dashboard" currentPrice={currentPrice}>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
@@ -102,11 +148,11 @@ export default function DashboardPage() {
             subtitle="Historical BTC price (line chart)."
             right={
               <div className="text-xs text-zinc-500">
-                {loading ? "Loading…" : "Mock data"}
+                {loading ? "Loading…" : "Actual data"}
               </div>
             }
           >
-            <PriceChart data={prices} />
+         <PriceChart data={visibleData} />
           </Card>
         </div>
 
@@ -144,15 +190,7 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        <div className="lg:col-span-7">
-          <Card
-            title="Value-at-Risk (VaR)"
-            subtitle="Downside risk measurement at 95% and 99% confidence."
-            right={<div className="text-xs text-zinc-500">No price prediction</div>}
-          >
-            {varData ? <VaRPanel data={varData} /> : <div className="text-sm text-zinc-400">Loading…</div>}
-          </Card>
-        </div>
+      
 
         <div className="lg:col-span-5">
           <Card

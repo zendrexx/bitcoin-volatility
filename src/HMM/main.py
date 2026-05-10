@@ -23,6 +23,8 @@ model = train_hmm(X)
 # predict
 df["state"] = predict_states(model, X)
 #df_test["state"] = predict_states(model, X_test)
-    
+df = df[['time', 'open', 'high', 'low', 'close', 'volume', 'log_return', 'volatility', 'state']]
 print(df.head(50))
+print(df["volatility"].describe())
+print(df["log_return"].describe())
 #export_json(df, "5m")

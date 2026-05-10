@@ -1,4 +1,4 @@
-import type { HmmStateResponse } from "@/utils/mockData";
+import type { HmmStateResponse } from "@/utils/data";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 
 function colorForState(state: "LOW" | "MEDIUM" | "HIGH") {
