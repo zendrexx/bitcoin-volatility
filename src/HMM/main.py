@@ -24,7 +24,18 @@ model = train_hmm(X)
 df["state"] = predict_states(model, X)
 #df_test["state"] = predict_states(model, X_test)
 df = df[['time', 'open', 'high', 'low', 'close', 'volume', 'log_return', 'volatility', 'state']]
+vol_means = df.groupby("state")["volatility"].mean()
+
+sorted_states = vol_means.sort_values().index
+
+state_map = {
+    sorted_states[0]: "Low",
+    sorted_states[1]: "Medium",
+    sorted_states[2]: "High"
+}
+
+df["regime"] = df["state"].map(state_map)
 print(df.head(50))
-print(df["volatility"].describe())
-print(df["log_return"].describe())
+print(df.groupby("state")["volatility"].describe())
+print(df.groupby("state")["log_return"].describe())
 #export_json(df, "5m")
