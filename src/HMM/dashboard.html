@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HMM Crypto Regime Detection Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:#f4f4f1;color:#1a1a18;font-size:13px;line-height:1.5}
+.wrap{max-width:1120px;margin:0 auto;padding:18px}
+h1{font-size:17px;font-weight:600;margin-bottom:2px}
+.sub{font-size:11px;color:#777;margin-bottom:14px}
+
+/* controls */
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;
+  background:#fff;border:1px solid #e0e0d8;border-radius:10px;padding:12px 16px;margin-bottom:12px}
+.cg{display:flex;flex-direction:column;gap:3px}
+.cl{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em}
+select{font-size:12px;border:1px solid #d0d0c8;border-radius:6px;padding:5px 10px;background:#fff;color:#1a1a18;cursor:pointer}
+input[type=range]{width:90px;cursor:pointer}
+.run-btn{font-size:12px;border:1px solid #1a1a18;border-radius:6px;padding:6px 18px;
+  background:#1a1a18;color:#fff;font-weight:500;cursor:pointer}
+.run-btn:disabled{background:#aaa;border-color:#aaa;cursor:not-allowed}
+
+/* coin tabs */
+.coin-tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.coin-tab{font-size:12px;padding:5px 14px;border:1px solid #ccc;border-radius:20px;
+  background:#fff;color:#555;cursor:pointer;transition:all .12s;font-weight:500}
+.coin-tab:hover{border-color:#888;color:#1a1a18}
+.coin-tab.active{background:#1a1a18;color:#fff;border-color:#1a1a18}
+.coin-tab.unavail{opacity:.4;cursor:not-allowed}
+
+/* file map */
+.filemap{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px}
+.fc{font-size:10px;padding:3px 8px;border-radius:5px;border:1px solid}
+.fc.ok  {background:#eafaf2;border-color:#7dd5a8;color:#145c35}
+.fc.miss{background:#fff8e8;border-color:#f5d98a;color:#7a5000}
+
+/* status */
+.status{font-size:11px;padding:7px 12px;border-radius:7px;margin-bottom:12px;display:none}
+.status.info{background:#eef4ff;border:1px solid #b8d0f8;color:#1a4a9a;display:block}
+.status.ok  {background:#eafaf2;border:1px solid #7dd5a8;color:#145c35;display:block}
+.status.err {background:#fff0f0;border:1px solid #f5b8b8;color:#8a1a1a;display:block}
+
+/* tabs */
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px}
+.tab{font-size:11px;padding:5px 12px;border:1px solid #ccc;border-radius:6px;
+  background:transparent;color:#555;cursor:pointer;transition:all .12s}
+.tab:hover{background:#eee}
+.tab.active{background:#1a1a18;color:#fff;border-color:#1a1a18}
+
+/* panels */
+.panel{display:none}.panel.active{display:block}
+.card{background:#fff;border:1px solid #e0e0d8;border-radius:10px;padding:16px;margin-bottom:10px}
+.card-title{font-size:12px;font-weight:600;color:#444;margin-bottom:8px}
+.hint{font-size:10px;color:#aaa;margin-top:5px}
+
+/* legend */
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:10px;color:#555;margin-bottom:8px}
+.li{display:flex;align-items:center;gap:4px}
+.lb{width:20px;height:2px;border-radius:1px;flex-shrink:0}
+
+/* chart sizes */
+.ch{position:relative;width:100%;height:250px}
+.ch-sm{position:relative;width:100%;height:175px}
+.avg-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+
+/* ranking */
+.rk-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.rk-card{background:#f8f8f5;border:1px solid #e0e0d8;border-radius:8px;padding:12px}
+.rk-title{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;
+  margin-bottom:7px;padding-bottom:5px;border-bottom:1px solid #e8e8e0}
+.rk-row{display:flex;align-items:center;gap:6px;margin:5px 0;font-size:12px}
+.badge{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:10px;font-weight:700;flex-shrink:0}
+.g{background:#FAC775;color:#3d2000}
+.s{background:#c0c0b8;color:#2a2a28}
+.b{background:#cd7f32;color:#fff}
+.rk-val{margin-left:auto;color:#888;font-size:10px}
+
+/* findings */
+.findings{font-size:12px;color:#444;line-height:1.85}
+.findings b{color:#1a1a18}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>HMM Crypto Regime Detection Dashboard</h1>
+  <p class="sub">Comparing feature sets A–D across quarters using Hidden Markov Models</p>
+
+  <!-- Coin selector -->
+  <div class="coin-tabs" id="coin-tabs">
+    <span style="font-size:10px;color:#888;align-self:center;text-transform:uppercase;letter-spacing:.04em;margin-right:4px">Coin:</span>
+    <!-- populated by JS after /api/coins -->
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <div class="cg">
+      <span class="cl">Timeframe</span>
+      <select id="tf-sel">
+        <option value="5m">5m</option>
+        <option value="15m" selected>15m</option>
+        <option value="30m">30m</option>
+      </select>
+    </div>
+    <div class="cg">
+      <span class="cl">Hidden States: <span id="st-out">3</span></span>
+      <input type="range" id="st-sl" min="2" max="5" value="3" step="1"
+        oninput="document.getElementById('st-out').textContent=this.value">
+    </div>
+    <div class="cg" style="margin-left:auto">
+      <span class="cl">&nbsp;</span>
+      <button class="run-btn" id="run-btn" onclick="runAnalysis()">▶ Run Analysis</button>
+    </div>
+  </div>
+
+  <!-- File map -->
+  <div id="filemap" class="filemap"></div>
+
+  <!-- Status -->
+  <div id="status" class="status"></div>
+
+  <!-- Chart tabs -->
+  <div id="tab-bar" class="tabs" style="display:none">
+    <button class="tab active" onclick="showTab('ll',this)">Log-Likelihood</button>
+    <button class="tab" onclick="showTab('aic',this)">AIC</button>
+    <button class="tab" onclick="showTab('bic',this)">BIC</button>
+    <button class="tab" onclick="showTab('avg',this)">Avg Performance</button>
+    <button class="tab" onclick="showTab('ranking',this)">Rankings</button>
+  </div>
+
+  <!-- Log-Likelihood -->
+  <div id="panel-ll" class="panel active">
+    <div class="card">
+      <div class="card-title">Log-Likelihood by Quarter — higher is better</div>
+      <div class="legend" id="ll-leg"></div>
+      <div class="ch"><canvas id="ll-chart"></canvas></div>
+      <p class="hint">Each point = one quarter. Higher LL = model fits that quarter's data better.</p>
+    </div>
+  </div>
+
+  <!-- AIC -->
+  <div id="panel-aic" class="panel">
+    <div class="card">
+      <div class="card-title">AIC by Quarter — lower is better</div>
+      <div class="legend" id="aic-leg"></div>
+      <div class="ch"><canvas id="aic-chart"></canvas></div>
+      <p class="hint">AIC = 2k − 2·LL. Penalises extra parameters.</p>
+    </div>
+  </div>
+
+  <!-- BIC -->
+  <div id="panel-bic" class="panel">
+    <div class="card">
+      <div class="card-title">BIC by Quarter — lower is better</div>
+      <div class="legend" id="bic-leg"></div>
+      <div class="ch"><canvas id="bic-chart"></canvas></div>
+      <p class="hint">BIC = k·ln(n) − 2·LL. Stronger penalty than AIC.</p>
+    </div>
+  </div>
+
+  <!-- Avg Performance -->
+  <div id="panel-avg" class="panel">
+    <div class="card">
+      <div class="card-title">Average Performance Across All Quarters</div>
+      <div class="avg-grid">
+        <div>
+          <p style="font-size:10px;color:#888;margin-bottom:4px">Avg Log-Likelihood ↑</p>
+          <div class="ch-sm"><canvas id="avg-ll"></canvas></div>
+        </div>
+        <div>
+          <p style="font-size:10px;color:#888;margin-bottom:4px">Avg AIC ↓</p>
+          <div class="ch-sm"><canvas id="avg-aic"></canvas></div>
+        </div>
+        <div>
+          <p style="font-size:10px;color:#888;margin-bottom:4px">Avg BIC ↓</p>
+          <div class="ch-sm"><canvas id="avg-bic"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rankings -->
+  <div id="panel-ranking" class="panel">
+    <div class="card">
+      <div class="card-title">Model Rankings</div>
+      <div class="rk-grid" id="rk-grid"></div>
+      <div style="border-top:1px solid #e8e8e0;padding-top:12px">
+        <div class="card-title">Research Findings</div>
+        <div class="findings" id="findings"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const API = 'http://localhost:5050';
+
+const M_COLORS = ['#378ADD','#1D9E75','#D85A30','#7F77DD'];
+const M_DASHES = [[], [6,3], [3,3], [8,3,2,3]];
+const M_NAMES  = ['Model A','Model B','Model C','Model D'];
+const M_FEAT   = [
+  'Log Return + High-Low Range',
+  'Log Return + High-Low Range + Log Volume',
+  'Log Return + High-Low Range + Rolling Volatility',
+  'Log Return + High-Low Range + Log Volume + Rolling Volatility',
+];
+const QUARTERS = ['Q1','Q2','Q3','Q4'];
+
+let charts   = {};
+let lastData = null;
+let activeCoin = 'btc';
+
+// ── Status ──────────────────────────────────────────────────────────────────
+function setStatus(msg, type='info'){
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className   = 'status ' + type;
+}
+
+// ── Chart helpers ───────────────────────────────────────────────────────────
+function destroyChart(id){
+  if(charts[id]){ charts[id].destroy(); delete charts[id]; }
+}
+
+function makeLegend(id){
+  document.getElementById(id).innerHTML = M_NAMES.map((n,i)=>`
+    <span class="li">
+      <span class="lb" style="background:${M_COLORS[i]}"></span>${n}: ${M_FEAT[i]}
+    </span>`).join('');
+}
+
+// ── Coin tabs ───────────────────────────────────────────────────────────────
+async function loadCoins(){
+  const container = document.getElementById('coin-tabs');
+  try {
+    const r    = await fetch(`${API}/api/coins`);
+    const list = await r.json();
+
+    // Always show all 3 coins; grey out if no files found
+    const allCoins = [
+      {coin:'btc', label:'Bitcoin'},
+      {coin:'eth', label:'Ethereum'},
+      {coin:'doge',label:'Dogecoin'},
+    ];
+    const available = list;  // server returns plain strings: ["btc","eth","doge"]
+
+    container.innerHTML = allCoins.map(c => {
+      const has = available.includes(c.coin);
+      return `<button
+        class="coin-tab ${c.coin===activeCoin?'active':''} ${has?'':'unavail'}"
+        onclick="selectCoin('${c.coin}', ${has})"
+        title="${has ? 'Click to select' : 'No data files found for this coin'}"
+      >${c.label}</button>`;
+    }).join('');
+
+  } catch(_) {
+    container.innerHTML += '<span style="font-size:11px;color:#c00">Server not reachable</span>';
+  }
+}
+
+function selectCoin(coin, hasData){
+  if(!hasData){
+    setStatus(`No ${coin.toUpperCase()} files found in data/raw/. Run: python data_fetcher.py ${coin}`, 'err');
+    return;
+  }
+  activeCoin = coin;
+  // Update tab highlights
+  document.querySelectorAll('.coin-tab').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  // Refresh file map for new coin
+  loadFileMap();
+  // Clear old results
+  document.getElementById('tab-bar').style.display = 'none';
+  document.getElementById('status').className = 'status';
+  lastData = null;
+}
+
+// ── File map ─────────────────────────────────────────────────────────────────
+async function loadFileMap(){
+  const el = document.getElementById('filemap');
+  try {
+    const r = await fetch(`${API}/api/files?coin=${activeCoin}`);
+    const d = await r.json();
+    let html = '';
+    ['5m','15m','30m'].forEach(tf => {
+      const found = d[tf] || [];
+      QUARTERS.forEach(q => {
+        const f = found.find(x => x.quarter===q);
+        html += f
+          ? `<span class="fc ok">${activeCoin.toUpperCase()} ${tf} ${q} ✓ ${f.size_mb}MB</span>`
+          : `<span class="fc miss">${activeCoin.toUpperCase()} ${tf} ${q} missing</span>`;
+      });
+    });
+    el.innerHTML = html;
+  } catch(_) {
+    el.innerHTML = '<span class="fc miss">Server not reachable — start server.py first</span>';
+  }
+}
+
+// ── Run analysis ──────────────────────────────────────────────────────────────
+async function runAnalysis(){
+  const tf      = document.getElementById('tf-sel').value;
+  const nStates = document.getElementById('st-sl').value;
+  const btn     = document.getElementById('run-btn');
+
+  btn.disabled    = true;
+  btn.textContent = '⏳ Running…';
+  setStatus(`Running HMM on ${activeCoin.toUpperCase()} ${tf} data with ${nStates} states…`, 'info');
+  document.getElementById('tab-bar').style.display = 'none';
+
+  try {
+    const r = await fetch(`${API}/api/run?coin=${activeCoin}&tf=${tf}&states=${nStates}`);
+    if(!r.ok) throw new Error(`Server returned ${r.status}`);
+    const d = await r.json();
+
+    const ok = (d.results || []).filter(x => !x.error);
+    if(ok.length === 0){
+      setStatus(`No results for ${activeCoin.toUpperCase()} ${tf}. Are the files in data/raw/?`, 'err');
+      return;
+    }
+
+    lastData = d;
+    setStatus(
+      `${d.coin} · ${tf} · ${nStates} states · quarters: ${d.available.join(', ')}` +
+      (d.missing.length ? ` · missing: ${d.missing.join(', ')}` : ''),
+      'ok'
+    );
+    document.getElementById('tab-bar').style.display = 'flex';
+    renderAll(d);
+
+  } catch(e) {
+    setStatus('Cannot reach server. Run: python server.py', 'err');
+    console.error(e);
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = '▶ Run Analysis';
+  }
+}
+
+// ── Data helpers ──────────────────────────────────────────────────────────────
+function extractSeries(results, metric){
+  return M_NAMES.map(mn =>
+    QUARTERS.map(q => {
+      const r = results.find(x => x.model===mn && x.quarter===q && !x.error);
+      return r ? r[metric] : null;
+    })
+  );
+}
+
+function avgSeries(series){
+  return series.map(arr => {
+    const vals = arr.filter(v => v !== null);
+    return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+  });
+}
+
+// ── Chart builders ────────────────────────────────────────────────────────────
+function buildLine(canvasId, series, qLabels){
+  destroyChart(canvasId);
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  charts[canvasId] = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: qLabels,
+      datasets: M_NAMES.map((name,i) => ({
+        label:           name,
+        data:            series[i],
+        borderColor:     M_COLORS[i],
+        borderWidth:     2.5,
+        borderDash:      M_DASHES[i],
+        pointRadius:     5,
+        pointHoverRadius:7,
+        tension:         0.3,
+        fill:            false,
+        spanGaps:        true,
+      }))
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          mode: 'index', intersect: false,
+          callbacks: { label: c => `${c.dataset.label}: ${c.raw!==null ? c.raw.toFixed(2) : 'N/A'}` }
+        }
+      },
+      scales: {
+        x: { ticks:{font:{size:11}}, grid:{display:false} },
+        y: { ticks:{font:{size:10}}, grid:{color:'rgba(0,0,0,0.06)'} }
+      }
+    }
+  });
+}
+
+function buildBars(canvasId, values){
+  destroyChart(canvasId);
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  charts[canvasId] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['A','B','C','D'],
+      datasets: [{
+        data:            values.map(v => v!==null ? parseFloat(v.toFixed(2)) : null),
+        backgroundColor: M_COLORS,
+        borderWidth:     0,
+        borderRadius:    4,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => c.raw!==null ? c.raw.toFixed(2) : 'N/A' } }
+      },
+      scales: {
+        x: { ticks:{font:{size:11}}, grid:{display:false} },
+        y: { ticks:{font:{size:10}}, grid:{color:'rgba(0,0,0,0.06)'} }
+      }
+    }
+  });
+}
+
+// ── Rankings ──────────────────────────────────────────────────────────────────
+function buildRanking(avgLL, avgAIC, avgBIC, coin, nStates){
+  const byLL  = M_NAMES.map((n,i)=>({n,v:avgLL[i]})).filter(x=>x.v!==null).sort((a,b)=>b.v-a.v);
+  const byAIC = M_NAMES.map((n,i)=>({n,v:avgAIC[i]})).filter(x=>x.v!==null).sort((a,b)=>a.v-b.v);
+  const byBIC = M_NAMES.map((n,i)=>({n,v:avgBIC[i]})).filter(x=>x.v!==null).sort((a,b)=>a.v-b.v);
+
+  const medals = ['g','s','b'];
+  function rhtml(arr, fmt){
+    return arr.slice(0,3).map((x,r)=>`
+      <div class="rk-row">
+        <span class="badge ${medals[r]}">${r+1}</span>
+        <span>${x.n}</span>
+        <span class="rk-val">${fmt(x.v)}</span>
+      </div>`).join('');
+  }
+
+  document.getElementById('rk-grid').innerHTML = `
+    <div class="rk-card">
+      <div class="rk-title">Log-Likelihood ↑</div>${rhtml(byLL, v=>v.toFixed(2))}
+    </div>
+    <div class="rk-card">
+      <div class="rk-title">AIC ↓</div>${rhtml(byAIC, v=>v.toFixed(2))}
+    </div>
+    <div class="rk-card">
+      <div class="rk-title">BIC ↓</div>${rhtml(byBIC, v=>v.toFixed(2))}
+    </div>`;
+
+  const bestLL  = byLL[0]?.n  || '—';
+  const bestAIC = byAIC[0]?.n || '—';
+  const bestBIC = byBIC[0]?.n || '—';
+  const llA = avgLL[0], llB = avgLL[1], llC = avgLL[2];
+  const gainB = llA!==null&&llB!==null ? (llB-llA).toFixed(2) : '?';
+  const gainC = llA!==null&&llC!==null ? (llC-llA).toFixed(2) : '?';
+
+  document.getElementById('findings').innerHTML = `
+    <b>1. Does Log Volume improve HMM performance for ${coin}?</b><br>
+    Model B gains <b>${gainB} LL</b> vs Model A.
+    ${parseFloat(gainB)>0
+      ? 'Log Volume adds useful information for regime detection on this coin.'
+      : 'Log Volume does not improve LL — the High-Low Range already captures volume-driven price action.'}<br><br>
+
+    <b>2. Does Rolling Volatility improve performance?</b><br>
+    Model C gains <b>${gainC} LL</b> vs Model A.
+    ${parseFloat(gainC)>parseFloat(gainB)
+      ? 'Rolling Volatility is more informative than Log Volume — it captures volatility clustering across bars.'
+      : 'Both features contribute similarly. Consider checking their correlation with High-Low Range.'}<br><br>
+
+    <b>3. Best feature set?</b><br>
+    By LL: <b>${bestLL}</b> &nbsp;|&nbsp; By AIC: <b>${bestAIC}</b> &nbsp;|&nbsp; By BIC: <b>${bestBIC}</b>.
+    ${bestAIC===bestBIC
+      ? `Both criteria agree — <b>${bestAIC}</b> is the best-regularised model for ${coin}.`
+      : `AIC prefers <b>${bestAIC}</b>, BIC prefers <b>${bestBIC}</b>. BIC's stronger penalty rules out the extra feature in one model.`}<br><br>
+
+    <b>4. Most stable through time?</b><br>
+    Visually check the LL / AIC / BIC line charts — the flattest line across Q1–Q4 is the most stable model.<br><br>
+
+    <b>5. Optimal hidden states for ${coin}?</b><br>
+    Currently <b>${nStates} states</b>.
+    ${nStates==3
+      ? 'Three states (Bull / Sideways / Bear) is the standard decomposition and generally optimal.'
+      : nStates<3
+        ? 'Two states may be too coarse — consider trying 3.'
+        : `More than 3 states risks over-segmentation. Compare BIC at 3 vs ${nStates} states.`}`;
+}
+
+// ── Render all ────────────────────────────────────────────────────────────────
+function renderAll(d){
+  const results = d.results.filter(x => !x.error);
+  const avail   = d.available;
+  const qLabels = QUARTERS.filter(q => avail.includes(q));
+
+  const llSeries  = extractSeries(results, 'log_likelihood');
+  const aicSeries = extractSeries(results, 'aic');
+  const bicSeries = extractSeries(results, 'bic');
+
+  // Only keep quarters that have data
+  const filterAvail = s => s.map(arr => arr.filter((_,i) => avail.includes(QUARTERS[i])));
+  const llF  = filterAvail(llSeries);
+  const aicF = filterAvail(aicSeries);
+  const bicF = filterAvail(bicSeries);
+
+  makeLegend('ll-leg');
+  makeLegend('aic-leg');
+  makeLegend('bic-leg');
+
+  buildLine('ll-chart',  llF,  qLabels);
+  buildLine('aic-chart', aicF, qLabels);
+  buildLine('bic-chart', bicF, qLabels);
+
+  const avgLL  = avgSeries(llF);
+  const avgAIC = avgSeries(aicF);
+  const avgBIC = avgSeries(bicF);
+
+  buildBars('avg-ll',  avgLL);
+  buildBars('avg-aic', avgAIC);
+  buildBars('avg-bic', avgBIC);
+
+  buildRanking(avgLL, avgAIC, avgBIC, d.coin, d.n_states);
+}
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+function showTab(id, btn){
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('panel-'+id).classList.add('active');
+  btn.classList.add('active');
+  if(lastData) setTimeout(() => renderAll(lastData), 30);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadCoins();
+loadFileMap();
+</script>
+</body>
+</html>
