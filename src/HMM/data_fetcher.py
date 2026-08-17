@@ -10,7 +10,8 @@ Usage:
     python data_fetcher.py            # fetches BTC (default)
     python data_fetcher.py eth        # fetches ETH
     python data_fetcher.py doge       # fetches DOGE
-    python data_fetcher.py btc eth doge  # fetches all three
+    python data_fetcher.py ltc        # fetches LTC
+    python data_fetcher.py btc eth doge ltc  # fetches all
 """
 
 import requests
@@ -31,6 +32,7 @@ COIN_MAP = {
     "btc":  "BTCUSDT",
     "eth":  "ETHUSDT",
     "doge": "DOGEUSDT",
+    "ltc":  "LTCUSDT",
 }
 
 QUARTERS = {
@@ -98,7 +100,7 @@ def fetch_coin(coin: str):
     print(f"{'='*50}")
 
     for quarter_name, (start_time, end_time) in QUARTERS.items():
-        print(f"\n  ── {quarter_name} ──")
+        print(f"\n  -- {quarter_name} --")
         for interval in INTERVALS:
             print(f"  Fetching {interval}...")
             klines   = get_klines(symbol, interval, start_time, end_time)

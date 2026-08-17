@@ -18,7 +18,6 @@ h1{font-size:17px;font-weight:600;margin-bottom:2px}
 .cg{display:flex;flex-direction:column;gap:3px}
 .cl{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em}
 select{font-size:12px;border:1px solid #d0d0c8;border-radius:6px;padding:5px 10px;background:#fff;color:#1a1a18;cursor:pointer}
-input[type=range]{width:90px;cursor:pointer}
 .run-btn{font-size:12px;border:1px solid #1a1a18;border-radius:6px;padding:6px 18px;
   background:#1a1a18;color:#fff;font-weight:500;cursor:pointer}
 .run-btn:disabled{background:#aaa;border-color:#aaa;cursor:not-allowed}
@@ -66,22 +65,6 @@ input[type=range]{width:90px;cursor:pointer}
 .ch-sm{position:relative;width:100%;height:175px}
 .avg-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 
-/* ranking */
-.rk-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
-.rk-card{background:#f8f8f5;border:1px solid #e0e0d8;border-radius:8px;padding:12px}
-.rk-title{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;
-  margin-bottom:7px;padding-bottom:5px;border-bottom:1px solid #e8e8e0}
-.rk-row{display:flex;align-items:center;gap:6px;margin:5px 0;font-size:12px}
-.badge{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;
-  justify-content:center;font-size:10px;font-weight:700;flex-shrink:0}
-.g{background:#FAC775;color:#3d2000}
-.s{background:#c0c0b8;color:#2a2a28}
-.b{background:#cd7f32;color:#fff}
-.rk-val{margin-left:auto;color:#888;font-size:10px}
-
-/* findings */
-.findings{font-size:12px;color:#444;line-height:1.85}
-.findings b{color:#1a1a18}
 </style>
 </head>
 <body>
@@ -106,11 +89,6 @@ input[type=range]{width:90px;cursor:pointer}
         <option value="30m">30m</option>
       </select>
     </div>
-    <div class="cg">
-      <span class="cl">Hidden States: <span id="st-out">3</span></span>
-      <input type="range" id="st-sl" min="2" max="5" value="3" step="1"
-        oninput="document.getElementById('st-out').textContent=this.value">
-    </div>
     <div class="cg" style="margin-left:auto">
       <span class="cl">&nbsp;</span>
       <button class="run-btn" id="run-btn" onclick="runAnalysis()">▶ Run Analysis</button>
@@ -129,7 +107,6 @@ input[type=range]{width:90px;cursor:pointer}
     <button class="tab" onclick="showTab('aic',this)">AIC</button>
     <button class="tab" onclick="showTab('bic',this)">BIC</button>
     <button class="tab" onclick="showTab('avg',this)">Avg Performance</button>
-    <button class="tab" onclick="showTab('ranking',this)">Rankings</button>
   </div>
 
   <!-- Log-Likelihood -->
@@ -183,22 +160,11 @@ input[type=range]{width:90px;cursor:pointer}
     </div>
   </div>
 
-  <!-- Rankings -->
-  <div id="panel-ranking" class="panel">
-    <div class="card">
-      <div class="card-title">Model Rankings</div>
-      <div class="rk-grid" id="rk-grid"></div>
-      <div style="border-top:1px solid #e8e8e0;padding-top:12px">
-        <div class="card-title">Research Findings</div>
-        <div class="findings" id="findings"></div>
-      </div>
-    </div>
-  </div>
-
 </div>
 
 <script>
 const API = 'http://localhost:5050';
+const N_STATES = 3;
 
 const M_COLORS = ['#378ADD','#1D9E75','#D85A30','#7F77DD'];
 const M_DASHES = [[], [6,3], [3,3], [8,3,2,3]];
@@ -241,11 +207,12 @@ async function loadCoins(){
     const r    = await fetch(`${API}/api/coins`);
     const list = await r.json();
 
-    // Always show all 3 coins; grey out if no files found
+    // Always show all coins; grey out if no files found
     const allCoins = [
       {coin:'btc', label:'Bitcoin'},
       {coin:'eth', label:'Ethereum'},
       {coin:'doge',label:'Dogecoin'},
+      {coin:'ltc', label:'Litecoin'},
     ];
     const available = list;  // server returns plain strings: ["btc","eth","doge"]
 
@@ -305,7 +272,7 @@ async function loadFileMap(){
 // ── Run analysis ──────────────────────────────────────────────────────────────
 async function runAnalysis(){
   const tf      = document.getElementById('tf-sel').value;
-  const nStates = document.getElementById('st-sl').value;
+  const nStates = N_STATES;
   const btn     = document.getElementById('run-btn');
 
   btn.disabled    = true;
@@ -325,10 +292,15 @@ async function runAnalysis(){
     }
 
     lastData = d;
+    // Fits that raised are dropped from every chart, so name them explicitly —
+    // otherwise a failed model/quarter is indistinguishable from absent data.
+    const failed = (d.results || []).filter(x => x.error)
+                     .map(x => `${x.model} ${x.quarter}`);
     setStatus(
       `${d.coin} · ${tf} · ${nStates} states · quarters: ${d.available.join(', ')}` +
-      (d.missing.length ? ` · missing: ${d.missing.join(', ')}` : ''),
-      'ok'
+      (d.missing.length ? ` · missing: ${d.missing.join(', ')}` : '') +
+      (failed.length ? ` · fit failed: ${failed.join(', ')}` : ''),
+      failed.length ? 'err' : 'ok'
     );
     document.getElementById('tab-bar').style.display = 'flex';
     renderAll(d);
@@ -425,71 +397,6 @@ function buildBars(canvasId, values){
   });
 }
 
-// ── Rankings ──────────────────────────────────────────────────────────────────
-function buildRanking(avgLL, avgAIC, avgBIC, coin, nStates){
-  const byLL  = M_NAMES.map((n,i)=>({n,v:avgLL[i]})).filter(x=>x.v!==null).sort((a,b)=>b.v-a.v);
-  const byAIC = M_NAMES.map((n,i)=>({n,v:avgAIC[i]})).filter(x=>x.v!==null).sort((a,b)=>a.v-b.v);
-  const byBIC = M_NAMES.map((n,i)=>({n,v:avgBIC[i]})).filter(x=>x.v!==null).sort((a,b)=>a.v-b.v);
-
-  const medals = ['g','s','b'];
-  function rhtml(arr, fmt){
-    return arr.slice(0,3).map((x,r)=>`
-      <div class="rk-row">
-        <span class="badge ${medals[r]}">${r+1}</span>
-        <span>${x.n}</span>
-        <span class="rk-val">${fmt(x.v)}</span>
-      </div>`).join('');
-  }
-
-  document.getElementById('rk-grid').innerHTML = `
-    <div class="rk-card">
-      <div class="rk-title">Log-Likelihood ↑</div>${rhtml(byLL, v=>v.toFixed(2))}
-    </div>
-    <div class="rk-card">
-      <div class="rk-title">AIC ↓</div>${rhtml(byAIC, v=>v.toFixed(2))}
-    </div>
-    <div class="rk-card">
-      <div class="rk-title">BIC ↓</div>${rhtml(byBIC, v=>v.toFixed(2))}
-    </div>`;
-
-  const bestLL  = byLL[0]?.n  || '—';
-  const bestAIC = byAIC[0]?.n || '—';
-  const bestBIC = byBIC[0]?.n || '—';
-  const llA = avgLL[0], llB = avgLL[1], llC = avgLL[2];
-  const gainB = llA!==null&&llB!==null ? (llB-llA).toFixed(2) : '?';
-  const gainC = llA!==null&&llC!==null ? (llC-llA).toFixed(2) : '?';
-
-  document.getElementById('findings').innerHTML = `
-    <b>1. Does Log Volume improve HMM performance for ${coin}?</b><br>
-    Model B gains <b>${gainB} LL</b> vs Model A.
-    ${parseFloat(gainB)>0
-      ? 'Log Volume adds useful information for regime detection on this coin.'
-      : 'Log Volume does not improve LL — the High-Low Range already captures volume-driven price action.'}<br><br>
-
-    <b>2. Does Rolling Volatility improve performance?</b><br>
-    Model C gains <b>${gainC} LL</b> vs Model A.
-    ${parseFloat(gainC)>parseFloat(gainB)
-      ? 'Rolling Volatility is more informative than Log Volume — it captures volatility clustering across bars.'
-      : 'Both features contribute similarly. Consider checking their correlation with High-Low Range.'}<br><br>
-
-    <b>3. Best feature set?</b><br>
-    By LL: <b>${bestLL}</b> &nbsp;|&nbsp; By AIC: <b>${bestAIC}</b> &nbsp;|&nbsp; By BIC: <b>${bestBIC}</b>.
-    ${bestAIC===bestBIC
-      ? `Both criteria agree — <b>${bestAIC}</b> is the best-regularised model for ${coin}.`
-      : `AIC prefers <b>${bestAIC}</b>, BIC prefers <b>${bestBIC}</b>. BIC's stronger penalty rules out the extra feature in one model.`}<br><br>
-
-    <b>4. Most stable through time?</b><br>
-    Visually check the LL / AIC / BIC line charts — the flattest line across Q1–Q4 is the most stable model.<br><br>
-
-    <b>5. Optimal hidden states for ${coin}?</b><br>
-    Currently <b>${nStates} states</b>.
-    ${nStates==3
-      ? 'Three states (Bull / Sideways / Bear) is the standard decomposition and generally optimal.'
-      : nStates<3
-        ? 'Two states may be too coarse — consider trying 3.'
-        : `More than 3 states risks over-segmentation. Compare BIC at 3 vs ${nStates} states.`}`;
-}
-
 // ── Render all ────────────────────────────────────────────────────────────────
 function renderAll(d){
   const results = d.results.filter(x => !x.error);
@@ -521,8 +428,6 @@ function renderAll(d){
   buildBars('avg-ll',  avgLL);
   buildBars('avg-aic', avgAIC);
   buildBars('avg-bic', avgBIC);
-
-  buildRanking(avgLL, avgAIC, avgBIC, d.coin, d.n_states);
 }
 
 // ── Tab switching ─────────────────────────────────────────────────────────────

@@ -1,20 +1,3 @@
-"""
-server.py
-Flask backend — reads your real btc_<tf>_<Q>_2025.json files,
-runs the HMM for all 4 models, and returns results to the dashboard.
-
-Now supports BTC, ETH, and DOGE — pass ?coin=eth or ?coin=doge to /api/run
-and /api/files (defaults to btc if not specified).
-
-Usage:
-    pip install flask flask-cors hmmlearn scikit-learn pandas numpy
-    python server.py
-
-Then open: http://localhost:5050
-Put your JSON files in data/raw/ relative to this script.
-Naming: {coin}_{tf}_{quarter}_2025.json  e.g. eth_15m_Q1_2025.json
-"""
-
 import os, json, traceback
 import numpy as np
 import pandas as pd
@@ -23,32 +6,25 @@ from flask_cors import CORS
 from sklearn.preprocessing import StandardScaler
 from hmmlearn.hmm import GaussianHMM
 
-# ── Config ────────────────────────────────────────────────────────────────
 DATA_DIR   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "raw")
-# If your data lives elsewhere relative to this script, override directly, e.g.:
-# DATA_DIR = "src/HMM/data/raw"
+
 TIMEFRAMES = ["5m", "15m", "30m"]
 QUARTERS   = ["Q1", "Q2", "Q3", "Q4"]
 YEAR       = 2025
 VOL_WINDOW = 10
 
-# Supported coins (short name used in filenames)
-SUPPORTED_COINS = ["btc", "eth", "doge"]
+
+SUPPORTED_COINS = ["btc", "eth", "doge", "ltc"]
 
 app = Flask(__name__, static_folder=".")
 CORS(app)
 
-# ── Data loading ──────────────────────────────────────────────────────────
 KLINE_COLS = ["time","open","high","low","close","volume","close_time",
               "qav","trades","tbbav","tbqav","ignore"]
 NUMERIC    = ["open","high","low","close","volume","qav","tbbav","tbqav"]
 
 def find_file(coin: str, tf: str, quarter: str) -> str | None:
-    """
-    Case-insensitive file lookup. Looks for {coin}_{tf}_{quarter}_{YEAR}.json
-    but tolerates different casing (ETH vs eth, q1 vs Q1, etc.) since that's
-    a common source of "file not found" when files were renamed by hand.
-    """
+   
     if not os.path.isdir(DATA_DIR):
         return None
     target = f"{coin}_{tf}_{quarter}_{YEAR}.json".lower()
@@ -70,13 +46,26 @@ def load_file(coin: str, tf: str, quarter: str) -> pd.DataFrame | None:
     df["trades"] = df["trades"].astype(int)
     return df.sort_values("time").reset_index(drop=True)
 
-# ── Feature builders ──────────────────────────────────────────────────────
+
+EXCLUDED_WINDOWS = []
+
+def drop_excluded(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop exogenous-event bars *after* derived columns exist, so log_return
+    and rolling_vol are never computed across the gap."""
+    if "time" not in df.columns:
+        return df
+    keep = pd.Series(True, index=df.index)
+    for start, end in EXCLUDED_WINDOWS:
+        keep &= ~df["time"].between(pd.Timestamp(start), pd.Timestamp(end))
+    return df[keep].reset_index(drop=True)
+
 def base_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df["log_return"]     = np.log(df["close"] / df["close"].shift(1))
     df["high_low_range"] = (df["high"] - df["low"]) / df["close"]
     df["rolling_vol"]    = df["log_return"].rolling(VOL_WINDOW).std()
-    return df.dropna().reset_index(drop=True)
+    df = df.dropna().reset_index(drop=True)
+    return drop_excluded(df)
 
 def scale(X):
     return StandardScaler().fit_transform(X)
@@ -95,11 +84,16 @@ MODEL_FEATURES = {
     "D": "Log Return + High-Low Range + Volume + Rolling Volatility",
 }
 
-# ── HMM metrics ───────────────────────────────────────────────────────────
 def compute_metrics(model: GaussianHMM, X: np.ndarray) -> dict:
     n, n_feat = X.shape
     ns = model.n_components
-    k  = ns*(ns-1) + (ns-1) + ns*n_feat + ns*n_feat*(n_feat+1)//2
+    k_cov = {
+        "spherical": ns,
+        "diag":      ns * n_feat,
+        "full":      ns * n_feat * (n_feat + 1) // 2,
+        "tied":      n_feat * (n_feat + 1) // 2,
+    }[model.covariance_type]
+    k  = ns*(ns-1) + (ns-1) + ns*n_feat + k_cov
     ll = model.score(X)
     return {
         "log_likelihood": round(float(ll), 4),
@@ -109,7 +103,6 @@ def compute_metrics(model: GaussianHMM, X: np.ndarray) -> dict:
         "n_obs":          int(n),
     }
 
-# ── Core computation ──────────────────────────────────────────────────────
 def run_hmm(coin: str, tf: str, quarter: str, n_states: int) -> list[dict]:
     df_raw = load_file(coin, tf, quarter)
     if df_raw is None:
@@ -123,7 +116,7 @@ def run_hmm(coin: str, tf: str, quarter: str, n_states: int) -> list[dict]:
         try:
             X = feature_fn(df)
             hmm = GaussianHMM(n_components=n_states, covariance_type="full",
-                              n_iter=200, random_state=42)
+                              n_iter=500, random_state=42)
             hmm.fit(X)
             metrics = compute_metrics(hmm, X)
 
@@ -164,7 +157,7 @@ def index():
 
 @app.route("/api/coins")
 def api_coins():
-    """List which coins have at least one data file present."""
+   
     available = []
     for coin in SUPPORTED_COINS:
         for tf in TIMEFRAMES:
@@ -220,7 +213,6 @@ def api_files():
 
 @app.route("/api/debug")
 def api_debug():
-    """List every file actually present in DATA_DIR, for troubleshooting naming mismatches."""
     if not os.path.isdir(DATA_DIR):
         return jsonify({"data_dir": DATA_DIR, "exists": False, "files": []})
     files = sorted(os.listdir(DATA_DIR))
@@ -229,6 +221,6 @@ def api_debug():
 if __name__ == "__main__":
     os.makedirs(DATA_DIR, exist_ok=True)
     print(f"\nData directory: {DATA_DIR}")
-    print("Supported coins: btc, eth, doge")
-    print("Place your files as:  btc_5m_Q1_2025.json  (and eth_, doge_ variants, Q2/Q3/Q4, 15m, 30m)\n")
+    print("Supported coins: btc, eth, doge, ltc")
+    print("Place your files as:  btc_5m_Q1_2025.json  (and eth_, doge_, ltc_ variants, Q2/Q3/Q4, 15m, 30m)\n")
     app.run(port=5050, debug=True)

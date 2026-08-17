@@ -30,15 +30,26 @@ MODEL_NAMES  = ["A", "B", "C", "D"]
 # ────────────────────────────────────────────────────────────────────────────
 
 
+def find_file(tf: str, q: str) -> str | None:
+    """Case-insensitive lookup of btc_{tf}_{q}_{YEAR}.json, matching server.py."""
+    if not os.path.isdir(DATA_DIR):
+        return None
+    target = f"btc_{tf}_{q}_{YEAR}.json".lower()
+    for fname in os.listdir(DATA_DIR):
+        if fname.lower() == target:
+            return os.path.join(DATA_DIR, fname)
+    return None
+
+
 def run():
     results = []
 
     for tf in TIMEFRAMES:
         for q in QUARTERS:
-            file_path = os.path.join(DATA_DIR, f"btc_{tf}_{q}_{YEAR}.json")
+            file_path = find_file(tf, q)
 
-            if not os.path.exists(file_path):
-                print(f"[SKIP] {file_path} not found.")
+            if file_path is None:
+                print(f"[SKIP] btc_{tf}_{q}_{YEAR}.json not found in {DATA_DIR}.")
                 continue
 
             print(f"\n{'='*50}")
