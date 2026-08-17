@@ -1,19 +1,3 @@
-"""
-data_fetcher.py
-Fetches OHLCV klines from Binance for any symbol.
-Saves as: data/raw/{coin}_{interval}_{quarter}_{year}.json
-e.g.  btc_5m_Q1_2025.json
-      eth_15m_Q2_2025.json
-      doge_30m_Q3_2025.json
-
-Usage:
-    python data_fetcher.py            # fetches BTC (default)
-    python data_fetcher.py eth        # fetches ETH
-    python data_fetcher.py doge       # fetches DOGE
-    python data_fetcher.py ltc        # fetches LTC
-    python data_fetcher.py btc eth doge ltc  # fetches all
-"""
-
 import requests
 import json
 import time

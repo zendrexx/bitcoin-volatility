@@ -1,25 +1,3 @@
-"""
-volume_analysis.py
-Thesis evidence that volume tracks volatility regimes in EVERY quarter.
-
-The LL/AIC/BIC comparison in main.py / the dashboard rewards features with
-heavy tails and high autocorrelation, so raw volume only "wins" in quarters
-with extreme volume spikes (Q1/Q4 2025). This script makes the volume case
-the valid way instead:
-
-  1. Fit Model C (log return + high-low range + rolling vol) — NO volume.
-  2. Decode the hidden regimes.
-  3. Measure mean deseasonalized volume surprise (volume_z) inside each regime.
-
-If volume carries regime information, high-vol regimes should show elevated
-volume surprise and low-vol regimes depressed volume surprise — out of
-sample with respect to the features the HMM was trained on.
-
-Usage:
-    python volume_analysis.py            # BTC, 15m
-    python volume_analysis.py 5m         # BTC, other timeframe
-"""
-
 import sys
 import numpy as np
 import pandas as pd
@@ -36,11 +14,7 @@ VOLUME_Z_WINDOW = 50   # bars used to z-score deseasonalized volume
 
 
 def add_volume_surprise(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Deseasonalized volume surprise: log volume minus its time-of-day
-    rolling-median baseline, z-scored over a rolling window. Measures
-    "how abnormal is volume right now" independent of clock time and drift.
-    """
+   
     df = df.copy()
     log_vol = np.log1p(df["volume"])
     tod = df["time"].dt.time

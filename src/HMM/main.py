@@ -1,15 +1,3 @@
-"""
-main.py
-Rolling window HMM comparison across Models A, B, C, D.
-
-Fixed from original:
-- Removed erroneous `from sklearn.covariance import log_likelihood` import
-- Replaced single volatility feature with 4 model variants (A/B/C/D)
-- AIC and BIC now computed alongside log-likelihood
-- Results exported to JSON for the dashboard
-- State labelling uses rolling_vol (not plain volatility)
-"""
-
 import os
 import pandas as pd
 import numpy as np
@@ -19,7 +7,6 @@ from feature_engineering import MODEL_BUILDERS
 from hmm_model import train_hmm, predict_states, compute_metrics, label_regimes
 from export_to_json import export_json, export_results_summary
 
-# ── Config ──────────────────────────────────────────────────────────────────
 TIMEFRAMES   = ["5m", "15m", "30m"]
 QUARTERS     = ["Q1", "Q2", "Q3", "Q4"]
 YEAR         = 2025
@@ -27,11 +14,9 @@ N_STATES     = 3       # number of hidden states
 VOL_WINDOW   = 10      # rolling volatility lookback (bars)
 DATA_DIR     = "data/raw"
 MODEL_NAMES  = ["A", "B", "C", "D"]
-# ────────────────────────────────────────────────────────────────────────────
 
 
 def find_file(tf: str, q: str) -> str | None:
-    """Case-insensitive lookup of btc_{tf}_{q}_{YEAR}.json, matching server.py."""
     if not os.path.isdir(DATA_DIR):
         return None
     target = f"btc_{tf}_{q}_{YEAR}.json".lower()

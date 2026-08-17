@@ -1,9 +1,3 @@
-"""
-data_loader.py
-Loads a Binance klines JSON file into a clean pandas DataFrame.
-Fixed: added type casting for all numeric columns, not just close.
-"""
-
 import json
 import pandas as pd
 
@@ -27,10 +21,7 @@ NUMERIC_COLS = ["open", "high", "low", "close", "volume", "qav", "tbbav", "tbqav
 
 
 def load_binance_json(filepath: str) -> pd.DataFrame:
-    """
-    Load a Binance klines JSON file and return a sorted DataFrame
-    with correct dtypes.
-    """
+  
     with open(filepath, "r") as f:
         data = json.load(f)
 
