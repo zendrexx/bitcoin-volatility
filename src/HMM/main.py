@@ -4,7 +4,7 @@ import numpy as np
 
 from data_loader import load_binance_json
 from feature_engineering import MODEL_BUILDERS
-from hmm_model import train_hmm, predict_states, compute_metrics, label_regimes
+from hmm_model import train_hmm, predict_states, compute_metrics, label_regimes, state_occupancy, is_degenerate
 from export_to_json import export_json, export_results_summary
 
 TIMEFRAMES   = ["5m", "15m", "30m"]
@@ -54,10 +54,21 @@ def run():
                     continue
 
                 # Train
-                model = train_hmm(X, n_states=N_STATES)
+                try:
+                    model = train_hmm(X, n_states=N_STATES)
+                    states = predict_states(model, X)
+                except Exception as e:
+                    print(f"  [Model {model_name}] FAILED: {e}")
+                    continue
 
-                # Predict
-                states = predict_states(model, X)
+                occ = state_occupancy(states, N_STATES)
+                if is_degenerate(states, N_STATES):
+                    print(
+                        f"  [Model {model_name}] DEGENERATE: state occupancy "
+                        f"{occ.round(4).tolist()} - a hidden state collapsed onto an "
+                        f"outlier rather than a regime, skipping export."
+                    )
+                    continue
 
                 # Metrics
                 metrics = compute_metrics(model, X)

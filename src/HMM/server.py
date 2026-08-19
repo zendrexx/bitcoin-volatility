@@ -47,7 +47,11 @@ def load_file(coin: str, tf: str, quarter: str) -> pd.DataFrame | None:
     return df.sort_values("time").reset_index(drop=True)
 
 
-EXCLUDED_WINDOWS = []
+EXCLUDED_WINDOWS = [
+    ("2025-10-10 20:00:00", "2025-10-11 04:00:00"),  # liquidation cascade; collapses hidden states under full covariance
+]
+
+MIN_STATE_OCCUPANCY = 0.01  # below this, a state has collapsed onto an outlier rather than modeling a regime
 
 def drop_excluded(df: pd.DataFrame) -> pd.DataFrame:
     """Drop exogenous-event bars *after* derived columns exist, so log_return
@@ -118,10 +122,26 @@ def run_hmm(coin: str, tf: str, quarter: str, n_states: int) -> list[dict]:
             hmm = GaussianHMM(n_components=n_states, covariance_type="full",
                               n_iter=500, random_state=42)
             hmm.fit(X)
+            states = hmm.predict(X)
+
+            occupancy = np.bincount(states, minlength=n_states) / len(states)
+            if occupancy.min() < MIN_STATE_OCCUPANCY:
+                results.append({
+                    "coin": coin.upper(), "timeframe": tf, "quarter": quarter,
+                    "model": f"Model {model_id}",
+                    "error": (
+                        f"degenerate fit: state occupancy {occupancy.round(4).tolist()} "
+                        f"(min {occupancy.min():.2%} < {MIN_STATE_OCCUPANCY:.0%}) - a hidden "
+                        "state collapsed onto an outlier bar instead of modeling a regime"
+                    ),
+                    "degenerate": True,
+                    "state_occupancy": occupancy.round(4).tolist(),
+                })
+                continue
+
             metrics = compute_metrics(hmm, X)
 
             # Regime labels ordered by mean rolling vol
-            states = hmm.predict(X)
             df_tmp = df.copy()
             df_tmp["state"] = states
             vol_order = df_tmp.groupby("state")["rolling_vol"].mean().sort_values().index.tolist()

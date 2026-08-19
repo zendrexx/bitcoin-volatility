@@ -4,7 +4,9 @@ from sklearn.preprocessing import StandardScaler
 
 
 
-EXCLUDED_WINDOWS = []
+EXCLUDED_WINDOWS = [
+    ("2025-10-10 20:00:00", "2025-10-11 04:00:00"),  # liquidation cascade; collapses hidden states under full covariance
+]
 
 
 def _drop_excluded(df: pd.DataFrame) -> pd.DataFrame:

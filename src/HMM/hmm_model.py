@@ -18,6 +18,17 @@ def predict_states(model: GaussianHMM, X: np.ndarray) -> np.ndarray:
     return model.predict(X)
 
 
+MIN_STATE_OCCUPANCY = 0.01  # below this, a state has collapsed onto an outlier rather than modeling a regime
+
+
+def state_occupancy(states: np.ndarray, n_states: int) -> np.ndarray:
+    return np.bincount(states, minlength=n_states) / len(states)
+
+
+def is_degenerate(states: np.ndarray, n_states: int, min_occupancy: float = MIN_STATE_OCCUPANCY) -> bool:
+    return bool(state_occupancy(states, n_states).min() < min_occupancy)
+
+
 def compute_metrics(model: GaussianHMM, X: np.ndarray) -> dict:
     
     n, n_features = X.shape
