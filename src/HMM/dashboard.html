@@ -62,8 +62,18 @@ select{font-size:12px;border:1px solid #d0d0c8;border-radius:6px;padding:5px 10p
 
 /* chart sizes */
 .ch{position:relative;width:100%;height:250px}
+.ch-comparison{position:relative;width:100%;height:205px}
 .ch-sm{position:relative;width:100%;height:175px}
 .avg-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.regime-swatch{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+.model-feature{font-size:10px;font-weight:400;color:#888;margin-left:6px}
+.timeline-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0 4px}
+.timeline-tools label{font-size:11px;color:#555}
+.timeline-tools select{padding:3px 8px}
+.timeline-range{font-size:11px;color:#555;margin-left:auto}
+.timeline-slider{width:100%;accent-color:#378ADD;cursor:pointer;margin:2px 0 8px}
+.ch-comparison canvas{cursor:grab;touch-action:pan-y}
+.ch-comparison canvas.dragging{cursor:grabbing}
 
 </style>
 </head>
@@ -103,14 +113,47 @@ select{font-size:12px;border:1px solid #d0d0c8;border-radius:6px;padding:5px 10p
 
   <!-- Chart tabs -->
   <div id="tab-bar" class="tabs" style="display:none">
-    <button class="tab active" onclick="showTab('ll',this)">Log-Likelihood</button>
-    <button class="tab" onclick="showTab('aic',this)">AIC</button>
-    <button class="tab" onclick="showTab('bic',this)">BIC</button>
-    <button class="tab" onclick="showTab('avg',this)">Avg Performance</button>
+    <button class="tab active" id="tab-regimes" onclick="showTab('regimes',this)">Regime Comparison</button>
+    <button class="tab" id="tab-ll" onclick="showTab('ll',this)">Log-Likelihood</button>
+    <button class="tab" id="tab-avg" onclick="showTab('avg',this)">Average Log-Likelihood</button>
+    <button class="tab" onclick="showTab('char',this)">Characteristics</button>
+  </div>
+
+  <!-- Regime comparison -->
+  <div id="panel-regimes" class="panel active">
+    <div class="card">
+      <div class="card-title" id="comparison-title">2025 Price and Volatility Regimes</div>
+      <div class="legend" id="regime-state-leg"></div>
+      <p class="hint" style="margin:0 0 10px">Every model uses the same closing-price data, UTC dates, and price scale. Green, amber, and red show its inferred volatility regime; gray shows dates without a valid fit. Dashed markers are quarter boundaries and each quarter has a separate HMM fit.</p>
+      <div class="timeline-tools">
+        <label for="view-window">Visible window</label>
+        <select id="view-window" onchange="changeComparisonWindow(this.value)">
+          <option value="1">1 day</option>
+          <option value="7">1 week</option>
+          <option value="15">15 days</option>
+          <option value="30" selected>30 days</option>
+          <option value="90">90 days</option>
+          <option value="180">180 days</option>
+          <option value="all">Full year</option>
+          <option value="custom" hidden>Custom</option>
+        </select>
+        <span class="timeline-range" id="timeline-range"></span>
+      </div>
+      <input class="timeline-slider" id="timeline-slider" type="range" aria-label="Move all model charts through 2025" oninput="slideComparison(this.value)">
+      <p class="hint" style="margin:0 0 10px">Drag any price chart to move all four together. Use the slider to travel through the year; hold Ctrl and scroll over a chart to zoom.</p>
+      <div class="card-title">Model A <span class="model-feature" id="feature-a"></span></div>
+      <div class="ch-comparison"><canvas id="comparison-a"></canvas></div>
+      <div class="card-title">Model B <span class="model-feature" id="feature-b"></span></div>
+      <div class="ch-comparison"><canvas id="comparison-b"></canvas></div>
+      <div class="card-title">Model C <span class="model-feature" id="feature-c"></span></div>
+      <div class="ch-comparison"><canvas id="comparison-c"></canvas></div>
+      <div class="card-title">Model D <span class="model-feature" id="feature-d"></span></div>
+      <div class="ch-comparison"><canvas id="comparison-d"></canvas></div>
+    </div>
   </div>
 
   <!-- Log-Likelihood -->
-  <div id="panel-ll" class="panel active">
+  <div id="panel-ll" class="panel">
     <div class="card">
       <div class="card-title">Log-Likelihood by Quarter — higher is better</div>
       <div class="legend" id="ll-leg"></div>
@@ -119,44 +162,29 @@ select{font-size:12px;border:1px solid #d0d0c8;border-radius:6px;padding:5px 10p
     </div>
   </div>
 
-  <!-- AIC -->
-  <div id="panel-aic" class="panel">
-    <div class="card">
-      <div class="card-title">AIC by Quarter — lower is better</div>
-      <div class="legend" id="aic-leg"></div>
-      <div class="ch"><canvas id="aic-chart"></canvas></div>
-      <p class="hint">AIC = 2k − 2·LL. Penalises extra parameters.</p>
-    </div>
-  </div>
-
-  <!-- BIC -->
-  <div id="panel-bic" class="panel">
-    <div class="card">
-      <div class="card-title">BIC by Quarter — lower is better</div>
-      <div class="legend" id="bic-leg"></div>
-      <div class="ch"><canvas id="bic-chart"></canvas></div>
-      <p class="hint">BIC = k·ln(n) − 2·LL. Stronger penalty than AIC.</p>
-    </div>
-  </div>
-
-  <!-- Avg Performance -->
+  <!-- Average Log-Likelihood -->
   <div id="panel-avg" class="panel">
     <div class="card">
-      <div class="card-title">Average Performance Across All Quarters</div>
-      <div class="avg-grid">
+      <div class="card-title">Average Log-Likelihood Across Available Quarters</div>
+      <div class="ch-sm"><canvas id="avg-ll"></canvas></div>
+    </div>
+  </div>
+  <!-- Characteristics -->
+  <div id="panel-char" class="panel">
+    <div class="card">
+      <div class="card-title">Raw Volatility Characteristics by Quarter — no HMM, no regime</div>
+      <div class="avg-grid" style="grid-template-columns:repeat(2,1fr)">
         <div>
-          <p style="font-size:10px;color:#888;margin-bottom:4px">Avg Log-Likelihood ↑</p>
-          <div class="ch-sm"><canvas id="avg-ll"></canvas></div>
+          <p style="font-size:10px;color:#888;margin-bottom:4px">Rolling Volatility (mean, by quarter)</p>
+          <div class="ch-sm"><canvas id="char-rv"></canvas></div>
         </div>
         <div>
-          <p style="font-size:10px;color:#888;margin-bottom:4px">Avg AIC ↓</p>
-          <div class="ch-sm"><canvas id="avg-aic"></canvas></div>
-        </div>
-        <div>
-          <p style="font-size:10px;color:#888;margin-bottom:4px">Avg BIC ↓</p>
-          <div class="ch-sm"><canvas id="avg-bic"></canvas></div>
+          <p style="font-size:10px;color:#888;margin-bottom:4px">High-Low Range (mean, by quarter)</p>
+          <div class="ch-sm"><canvas id="char-hl"></canvas></div>
         </div>
       </div>
+      <p class="hint">Computed directly from log returns, high-low range, volume and rolling volatility — independent of any HMM fit or model comparison. Answers RQ1 (characteristics per coin) and RQ3 (differences across quarters).</p>
+      <div style="overflow-x:auto;margin-top:10px"><table id="char-table" style="width:100%;border-collapse:collapse;font-size:11px;white-space:nowrap"></table></div>
     </div>
   </div>
 
@@ -171,15 +199,19 @@ const M_DASHES = [[], [6,3], [3,3], [8,3,2,3]];
 const M_NAMES  = ['Model A','Model B','Model C','Model D'];
 const M_FEAT   = [
   'Log Return + High-Low Range',
-  'Log Return + High-Low Range + Log Volume',
+  'Log Return + High-Low Range + Volume',
   'Log Return + High-Low Range + Rolling Volatility',
-  'Log Return + High-Low Range + Log Volume + Rolling Volatility',
+  'Log Return + High-Low Range + Volume + Rolling Volatility',
 ];
 const QUARTERS = ['Q1','Q2','Q3','Q4'];
-
+const REGIME_NAMES = ['Low volatility','Medium volatility','High volatility'];
+const REGIME_COLORS = ['#1D9E75','#E3A018','#D85A30'];
 let charts   = {};
 let lastData = null;
+let lastChar = null;
 let activeCoin = 'btc';
+const DAY_MS = 24 * 60 * 60 * 1000;
+let comparisonView = {key:null, frame:null};
 
 // ── Status ──────────────────────────────────────────────────────────────────
 function setStatus(msg, type='info'){
@@ -198,6 +230,12 @@ function makeLegend(id){
     <span class="li">
       <span class="lb" style="background:${M_COLORS[i]}"></span>${n}: ${M_FEAT[i]}
     </span>`).join('');
+}
+
+function makeRegimeLegends(){
+  document.getElementById('regime-state-leg').innerHTML = REGIME_NAMES.map((name,i)=>
+    `<span class="li"><span class="regime-swatch" style="background:${REGIME_COLORS[i]}"></span>${name}</span>`
+  ).join('') + '<span class="li"><span class="regime-swatch" style="background:#b5b5b5"></span>No valid fit</span>';
 }
 
 // ── Coin tabs ───────────────────────────────────────────────────────────────
@@ -220,7 +258,7 @@ async function loadCoins(){
       const has = available.includes(c.coin);
       return `<button
         class="coin-tab ${c.coin===activeCoin?'active':''} ${has?'':'unavail'}"
-        onclick="selectCoin('${c.coin}', ${has})"
+        onclick="selectCoin('${c.coin}', ${has}, this)"
         title="${has ? 'Click to select' : 'No data files found for this coin'}"
       >${c.label}</button>`;
     }).join('');
@@ -230,7 +268,7 @@ async function loadCoins(){
   }
 }
 
-function selectCoin(coin, hasData){
+function selectCoin(coin, hasData, button){
   if(!hasData){
     setStatus(`No ${coin.toUpperCase()} files found in data/raw/. Run: python data_fetcher.py ${coin}`, 'err');
     return;
@@ -238,13 +276,14 @@ function selectCoin(coin, hasData){
   activeCoin = coin;
   // Update tab highlights
   document.querySelectorAll('.coin-tab').forEach(b => b.classList.remove('active'));
-  event.target.classList.add('active');
+  button.classList.add('active');
   // Refresh file map for new coin
   loadFileMap();
   // Clear old results
   document.getElementById('tab-bar').style.display = 'none';
   document.getElementById('status').className = 'status';
   lastData = null;
+  lastChar = null;
 }
 
 // ── File map ─────────────────────────────────────────────────────────────────
@@ -275,6 +314,11 @@ async function runAnalysis(){
   const nStates = N_STATES;
   const btn     = document.getElementById('run-btn');
 
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('panel-regimes').classList.add('active');
+  document.getElementById('tab-regimes').classList.add('active');
+
   btn.disabled    = true;
   btn.textContent = '⏳ Running…';
   setStatus(`Running HMM on ${activeCoin.toUpperCase()} ${tf} data with ${nStates} states…`, 'info');
@@ -286,14 +330,13 @@ async function runAnalysis(){
     const d = await r.json();
 
     const ok = (d.results || []).filter(x => !x.error);
-    if(ok.length === 0){
-      setStatus(`No results for ${activeCoin.toUpperCase()} ${tf}. Are the files in data/raw/?`, 'err');
+    if(!Object.keys(d.regime_series || {}).length){
+      setStatus(`No usable 2025 data for ${activeCoin.toUpperCase()} ${tf}. Check the files in data/raw/.`, 'err');
       return;
     }
 
     lastData = d;
-    // Fits that raised are dropped from every chart, so name them explicitly —
-    // otherwise a failed model/quarter is indistinguishable from absent data.
+    // Name failed fits so gray price spans can be distinguished from missing data.
     const failed = (d.results || []).filter(x => x.error)
                      .map(x => `${x.model} ${x.quarter}`);
     setStatus(
@@ -302,11 +345,18 @@ async function runAnalysis(){
       (failed.length ? ` · fit failed: ${failed.join(', ')}` : ''),
       failed.length ? 'err' : 'ok'
     );
+    if(!ok.length) document.getElementById('status').className = 'status err';
     document.getElementById('tab-bar').style.display = 'flex';
     renderAll(d);
 
+    try {
+      const cr = await fetch(`${API}/api/characteristics?coin=${activeCoin}&tf=${tf}`);
+      lastChar = await cr.json();
+      renderCharacteristics(lastChar);
+    } catch(_) { lastChar = null; }
+
   } catch(e) {
-    setStatus('Cannot reach server. Run: python server.py', 'err');
+    setStatus('Could not run or draw analysis: ' + e.message, 'err');
     console.error(e);
   } finally {
     btn.disabled    = false;
@@ -332,6 +382,347 @@ function avgSeries(series){
 }
 
 // ── Chart builders ────────────────────────────────────────────────────────────
+function quarterMarkerPlugin(regimeSeries){
+  const starts = QUARTERS.slice(1).map(q=>regimeSeries?.[q]?.price_timestamps?.[0])
+    .filter(Number.isFinite);
+  return {
+    id: 'quarterMarkers',
+    beforeDatasetsDraw(chart){
+      const x = chart.scales.x;
+      const area = chart.chartArea;
+      const ctx = chart.ctx;
+      starts.forEach(value=>{
+        const px = x.getPixelForValue(value);
+        if(px < area.left || px > area.right) return;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(70,70,70,0.35)';
+        ctx.setLineDash([4,4]);
+        ctx.beginPath();
+        ctx.moveTo(px, area.top);
+        ctx.lineTo(px, area.bottom);
+        ctx.stroke();
+        ctx.restore();
+      });
+    }
+  };
+}
+
+function comparisonData(regimeSeries){
+  const times = [], prices = [];
+  const states = M_NAMES.map(()=>[]);
+  QUARTERS.forEach(q=>{
+    const quarter = regimeSeries?.[q];
+    if(!quarter) return;
+    const priceTimes = quarter.price_timestamps || [];
+    const close = quarter.close_prices || [];
+    const regimeTimes = quarter.timestamps || [];
+    const modelStates = M_NAMES.map((_,m)=>quarter.models?.[String.fromCharCode(65+m)] || []);
+    let regimeIndex = 0;
+    for(let i=0;i<Math.min(priceTimes.length, close.length);i++){
+      const time = priceTimes[i];
+      while(regimeIndex < regimeTimes.length && regimeTimes[regimeIndex] < time) regimeIndex++;
+      times.push(time);
+      prices.push(close[i]);
+      for(let m=0;m<4;m++){
+        states[m].push(regimeTimes[regimeIndex] === time ? (modelStates[m][regimeIndex] ?? null) : null);
+      }
+    }
+  });
+  return {times, prices, states};
+}
+
+function comparisonSampleIndices(){
+  const {times, prices, states, start, span}=comparisonView;
+  let left=0, right=times.length;
+  while(left<right){
+    const mid=(left+right)>>1;
+    if(times[mid]<start) left=mid+1; else right=mid;
+  }
+  const first=Math.max(0,left-1);
+  let after=left;
+  while(after<times.length && times[after]<=start+span) after++;
+  const last=Math.min(times.length-1,after);
+  const chosen=new Set([first,last]);
+  const bucketSize=Math.max(1,Math.ceil((last-first+1)/1200));
+  for(let bucket=first;bucket<=last;bucket+=bucketSize){
+    const end=Math.min(bucket+bucketSize,last+1);
+    let low=bucket, high=bucket;
+    for(let i=bucket+1;i<end;i++){
+      if(prices[i]<prices[low]) low=i;
+      if(prices[i]>prices[high]) high=i;
+    }
+    chosen.add(bucket);
+    chosen.add(low);
+    chosen.add(high);
+    chosen.add(end-1);
+  }
+  // Use one set of line vertices for every model; only segment colors may differ.
+  for(let i=first+1;i<=last;i++){
+    for(let m=0;m<4;m++){
+      if(states[m][i]!==states[m][i-1]){
+        chosen.add(i-1);
+        chosen.add(i);
+      }
+    }
+  }
+  return [...chosen].sort((a,b)=>a-b);
+}
+
+function comparisonPoints(indices, modelIndex){
+  const {times,prices,states}=comparisonView;
+  return indices.map(i=>({x:times[i],y:prices[i],regime:states[modelIndex][i],originalIndex:i}));
+}
+
+function comparisonPriceLimits(){
+  const {times, prices, start, span} = comparisonView;
+  let low=Infinity, high=-Infinity;
+  let left=0, right=times.length;
+  while(left<right){
+    const mid=(left+right)>>1;
+    if(times[mid]<start) left=mid+1; else right=mid;
+  }
+  for(let i=left;i<times.length && times[i]<=start+span;i++){
+    low=Math.min(low,prices[i]);
+    high=Math.max(high,prices[i]);
+  }
+  if(!Number.isFinite(low)){
+    low=comparisonView.fullLow;
+    high=comparisonView.fullHigh;
+  }
+  const padding=(high-low || high || 1)*0.06;
+  return {min:low-padding,max:high+padding};
+}
+
+function syncComparisonControls(){
+  const view=comparisonView;
+  const slider=document.getElementById('timeline-slider');
+  slider.min=String(view.domainStart);
+  slider.max=String(Math.max(view.domainStart,view.domainEnd-view.span));
+  slider.step=String(view.timeframeMs);
+  slider.value=String(view.start);
+  slider.disabled=view.span>=view.domainEnd-view.domainStart;
+  const date=new Intl.DateTimeFormat('en-US', {
+    month:'short',day:'numeric',year:'numeric',timeZone:'UTC',
+    ...(view.span<=2*DAY_MS ? {hour:'2-digit',minute:'2-digit',hourCycle:'h23'} : {})
+  });
+  document.getElementById('timeline-range').textContent =
+    date.format(new Date(view.start))+' – '+date.format(new Date(view.start+view.span))+' UTC';
+}
+
+function updateComparisonCharts(){
+  comparisonView.frame=null;
+  const limits=comparisonPriceLimits();
+  const indices=comparisonSampleIndices();
+  for(let m=0;m<4;m++){
+    const chart=charts['comparison-'+String.fromCharCode(97+m)];
+    if(!chart) continue;
+    chart.data.datasets[0].data=comparisonPoints(indices,m);
+    chart.options.scales.x.min=comparisonView.start;
+    chart.options.scales.x.max=comparisonView.start+comparisonView.span;
+    chart.options.scales.y.min=limits.min;
+    chart.options.scales.y.max=limits.max;
+    chart.update('none');
+  }
+}
+
+function setComparisonView(start, span){
+  const view=comparisonView;
+  const total=view.domainEnd-view.domainStart;
+  view.span=Math.max(Math.min(DAY_MS,total),Math.min(span,total));
+  const rounded=Math.round(Number(start)/view.timeframeMs)*view.timeframeMs;
+  view.start=Math.max(view.domainStart,Math.min(rounded,view.domainEnd-view.span));
+  syncComparisonControls();
+  if(view.frame===null) view.frame=requestAnimationFrame(updateComparisonCharts);
+}
+
+function changeComparisonWindow(value){
+  if(value==='custom' || !comparisonView.key) return;
+  const view=comparisonView;
+  const span=value==='all' ? view.domainEnd-view.domainStart : Number(value)*DAY_MS;
+  const center=view.start+view.span/2;
+  setComparisonView(center-span/2,span);
+}
+
+function slideComparison(value){
+  if(comparisonView.key) setComparisonView(Number(value),comparisonView.span);
+}
+
+function attachComparisonPan(canvas, chart){
+  let drag=null;
+  canvas.onpointerdown=event=>{
+    if(event.button!==0) return;
+    drag={x:event.clientX,start:comparisonView.start,span:comparisonView.span};
+    canvas.setPointerCapture(event.pointerId);
+    canvas.classList.add('dragging');
+  };
+  canvas.onpointermove=event=>{
+    if(!drag) return;
+    const width=chart.chartArea.right-chart.chartArea.left;
+    if(width>0) setComparisonView(drag.start-(event.clientX-drag.x)*drag.span/width,drag.span);
+  };
+  const endDrag=event=>{
+    drag=null;
+    canvas.classList.remove('dragging');
+    if(canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+  };
+  canvas.onpointerup=endDrag;
+  canvas.onpointercancel=endDrag;
+  canvas.onwheel=event=>{
+    if(!event.ctrlKey) return;
+    event.preventDefault();
+    const area=chart.chartArea;
+    const rect=canvas.getBoundingClientRect();
+    const ratio=Math.max(0,Math.min(1,(event.clientX-rect.left-area.left)/(area.right-area.left)));
+    const span=comparisonView.span*(event.deltaY<0 ? 0.8 : 1.25);
+    const anchor=comparisonView.start+ratio*comparisonView.span;
+    document.getElementById('view-window').value='custom';
+    setComparisonView(anchor-ratio*span,span);
+  };
+}
+
+function comparisonAxisTicks(){
+  const {start,span}=comparisonView;
+  const end=start+span;
+  const step=span<=2*DAY_MS ? DAY_MS/4 :
+    span<=20*DAY_MS ? 2*DAY_MS :
+    span<=45*DAY_MS ? 7*DAY_MS :
+    span<=120*DAY_MS ? 14*DAY_MS : null;
+  const values=[];
+  if(step){
+    for(let value=Math.ceil(start/step)*step;value<=end;value+=step) values.push({value});
+  } else {
+    const first=new Date(start);
+    let year=first.getUTCFullYear(), month=first.getUTCMonth();
+    if(Date.UTC(year,month,1)<start){
+      month++;
+      if(month===12){month=0;year++;}
+    }
+    for(let value=Date.UTC(year,month,1);value<=end;){
+      values.push({value});
+      month++;
+      if(month===12){month=0;year++;}
+      value=Date.UTC(year,month,1);
+    }
+  }
+  return values;
+}
+
+function buildComparisonCharts(regimeSeries, coin, timeframe){
+  makeRegimeLegends();
+  document.getElementById('comparison-title').textContent =
+    '2025 ' + coin + ' / USDT Close Price and Volatility Regimes (' + timeframe + ')';
+  const {times, prices, states} = comparisonData(regimeSeries);
+  if(!prices.length) return;
+  const decimals = coin.toLowerCase() === 'doge' ? 4 : 2;
+  const money = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits:decimals, maximumFractionDigits:decimals
+  });
+  const monthFormatter = new Intl.DateTimeFormat('en-US', {month:'short', timeZone:'UTC'});
+  const tooltipFormatter = new Intl.DateTimeFormat('en-US', {
+    month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit',
+    timeZone:'UTC', timeZoneName:'short'
+  });
+  let minPrice=Infinity, maxPrice=-Infinity;
+  for(const price of prices){
+    minPrice = Math.min(minPrice, price);
+    maxPrice = Math.max(maxPrice, price);
+  }
+  const timeframeMs = parseInt(timeframe, 10) * 60 * 1000;
+  const view=comparisonView;
+  const key=coin+':'+timeframe;
+  const fresh=view.key!==key;
+  if(view.frame!==null) cancelAnimationFrame(view.frame);
+  view.frame=null;
+  view.key=key;
+  view.times=times;
+  view.prices=prices;
+  view.states=states;
+  view.domainStart=times[0];
+  view.domainEnd=times[times.length-1];
+  view.fullLow=minPrice;
+  view.fullHigh=maxPrice;
+  view.timeframeMs=timeframeMs;
+  const total=view.domainEnd-view.domainStart;
+  view.span=fresh ? Math.min(30*DAY_MS,total) : Math.min(view.span,total);
+  view.start=fresh ? Date.UTC(2025,0,1) : view.start;
+  view.start=Math.max(view.domainStart,Math.min(view.start,view.domainEnd-view.span));
+  if(fresh) document.getElementById('view-window').value='30';
+  syncComparisonControls();
+  const limits=comparisonPriceLimits();
+  const indices=comparisonSampleIndices();
+  const dayFormatter=new Intl.DateTimeFormat('en-US', {month:'short',day:'numeric',timeZone:'UTC'});
+  const hourFormatter=new Intl.DateTimeFormat('en-US', {
+    month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZone:'UTC'
+  });
+  const hasDataGap = context=>{
+    const data = context.chart.data.datasets[context.datasetIndex].data;
+    const left = data[context.p0DataIndex], right = data[context.p1DataIndex];
+    return right.x-left.x > (right.originalIndex-left.originalIndex+2) * timeframeMs;
+  };
+
+  M_NAMES.forEach((name,m)=>{
+    const letter = String.fromCharCode(97+m);
+    const canvasId = 'comparison-' + letter;
+    destroyChart(canvasId);
+    document.getElementById('feature-' + letter).textContent = M_FEAT[m];
+    const canvas=document.getElementById(canvasId);
+    charts[canvasId] = new Chart(canvas.getContext('2d'), {
+      type:'line',
+      data:{datasets:[
+        {label:name, data:comparisonPoints(indices,m), borderWidth:2.2, pointRadius:0,
+         tension:0, spanGaps:false, borderColor:'#b5b5b5',
+         segment:{borderColor:context=>{
+           if(hasDataGap(context)) return 'transparent';
+           const state = context.chart.data.datasets[context.datasetIndex]
+             .data[context.p0DataIndex].regime;
+           return Number.isInteger(state) ? REGIME_COLORS[state] : '#b5b5b5';
+         }}}
+      ]},
+      plugins:[quarterMarkerPlugin(regimeSeries)],
+      options:{
+        responsive:true, maintainAspectRatio:false, parsing:false,
+        animation:false,
+        interaction:{mode:'nearest', axis:'x', intersect:false},
+        plugins:{
+          legend:{display:false},
+          tooltip:{
+            mode:'nearest', intersect:false,
+            callbacks:{
+              title:items=>items.length ? tooltipFormatter.format(new Date(items[0].parsed.x)) : '',
+              label:item=>{
+                const i = item.raw.originalIndex;
+                const state = states[m][i];
+                return [
+                  'Close: ' + money.format(prices[i]) + ' USDT',
+                  name + ': ' + (state === null ? 'No valid fit' : REGIME_NAMES[state])
+                ];
+              }
+            }
+          }
+        },
+        scales:{
+          x:{
+            type:'linear', min:view.start, max:view.start+view.span,
+            afterBuildTicks:axis=>{axis.ticks=comparisonAxisTicks();},
+            ticks:{font:{size:10}, callback:value=>
+              (view.span<=2*DAY_MS ? hourFormatter :
+               view.span<=120*DAY_MS ? dayFormatter : monthFormatter)
+                .format(new Date(Number(value)))},
+            grid:{display:false}
+          },
+          y:{
+            min:limits.min, max:limits.max,
+            afterFit:axis=>{axis.width=105;},
+            ticks:{font:{size:10}, callback:value=>money.format(Number(value))},
+            grid:{color:'rgba(0,0,0,0.08)'}
+          }
+        }
+      }
+    });
+    attachComparisonPan(canvas,charts[canvasId]);
+  });
+}
+
 function buildLine(canvasId, series, qLabels){
   destroyChart(canvasId);
   const ctx = document.getElementById(canvasId).getContext('2d');
@@ -397,37 +788,82 @@ function buildBars(canvasId, values){
   });
 }
 
+function buildQuarterBars(canvasId, values, qLabels, color){
+  destroyChart(canvasId);
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  charts[canvasId] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: qLabels, datasets: [{ data: values, backgroundColor: color, borderWidth:0, borderRadius:4 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => c.raw!==null ? c.raw.toFixed(6) : 'N/A' } }
+      },
+      scales: {
+        x: { ticks:{font:{size:11}}, grid:{display:false} },
+        y: { ticks:{font:{size:10}}, grid:{color:'rgba(0,0,0,0.06)'} }
+      }
+    }
+  });
+}
+
+function renderCharacteristics(d){
+  if(!d || !d.quarters) return;
+  const qs = QUARTERS.filter(q => d.quarters[q]);
+  if(!qs.length) return;
+
+  buildQuarterBars('char-rv', qs.map(q => d.quarters[q].rolling_vol.mean),    qs, '#378ADD');
+  buildQuarterBars('char-hl', qs.map(q => d.quarters[q].high_low_range.mean), qs, '#D85A30');
+
+  const feats = ['log_return','high_low_range','volume','rolling_vol'];
+  let rows = `<tr>
+    <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #e0e0d8">Quarter</th>
+    <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #e0e0d8">Feature</th>
+    <th style="text-align:right;padding:4px 8px;border-bottom:1px solid #e0e0d8">Mean</th>
+    <th style="text-align:right;padding:4px 8px;border-bottom:1px solid #e0e0d8">Std</th>
+    <th style="text-align:right;padding:4px 8px;border-bottom:1px solid #e0e0d8">Skew</th>
+    <th style="text-align:right;padding:4px 8px;border-bottom:1px solid #e0e0d8">Kurt</th>
+  </tr>`;
+  qs.forEach(q => {
+    feats.forEach(f => {
+      const s = d.quarters[q][f];
+      rows += `<tr>
+        <td style="padding:3px 8px;color:#888">${q}</td>
+        <td style="padding:3px 8px">${f}</td>
+        <td style="padding:3px 8px;text-align:right">${s.mean}</td>
+        <td style="padding:3px 8px;text-align:right">${s.std}</td>
+        <td style="padding:3px 8px;text-align:right">${s.skew}</td>
+        <td style="padding:3px 8px;text-align:right">${s.kurt}</td>
+      </tr>`;
+    });
+  });
+  document.getElementById('char-table').innerHTML = rows;
+}
+
 // ── Render all ────────────────────────────────────────────────────────────────
 function renderAll(d){
-  const results = d.results.filter(x => !x.error);
+  const results = (d.results || []).filter(x => !x.error);
   const avail   = d.available;
   const qLabels = QUARTERS.filter(q => avail.includes(q));
 
-  const llSeries  = extractSeries(results, 'log_likelihood');
-  const aicSeries = extractSeries(results, 'aic');
-  const bicSeries = extractSeries(results, 'bic');
+  if(document.getElementById('panel-regimes').classList.contains('active')){
+    buildComparisonCharts(d.regime_series || {}, d.coin || activeCoin.toUpperCase(), d.tf || document.getElementById('tf-sel').value);
+  }
+
+  const llSeries = extractSeries(results, 'log_likelihood');
 
   // Only keep quarters that have data
   const filterAvail = s => s.map(arr => arr.filter((_,i) => avail.includes(QUARTERS[i])));
-  const llF  = filterAvail(llSeries);
-  const aicF = filterAvail(aicSeries);
-  const bicF = filterAvail(bicSeries);
+  const llF = filterAvail(llSeries);
 
-  makeLegend('ll-leg');
-  makeLegend('aic-leg');
-  makeLegend('bic-leg');
-
-  buildLine('ll-chart',  llF,  qLabels);
-  buildLine('aic-chart', aicF, qLabels);
-  buildLine('bic-chart', bicF, qLabels);
-
-  const avgLL  = avgSeries(llF);
-  const avgAIC = avgSeries(aicF);
-  const avgBIC = avgSeries(bicF);
-
-  buildBars('avg-ll',  avgLL);
-  buildBars('avg-aic', avgAIC);
-  buildBars('avg-bic', avgBIC);
+  if(document.getElementById('panel-ll').classList.contains('active')){
+    makeLegend('ll-leg');
+    buildLine('ll-chart', llF, qLabels);
+  }
+  if(document.getElementById('panel-avg').classList.contains('active')){
+    buildBars('avg-ll', avgSeries(llF));
+  }
 }
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
@@ -437,6 +873,7 @@ function showTab(id, btn){
   document.getElementById('panel-'+id).classList.add('active');
   btn.classList.add('active');
   if(lastData) setTimeout(() => renderAll(lastData), 30);
+  if(lastChar) setTimeout(() => renderCharacteristics(lastChar), 30);
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────

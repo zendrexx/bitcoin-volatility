@@ -82,3 +82,5 @@ def label_regimes(df, states: np.ndarray) -> dict:
     state_map = {state: names[i] for i, state in enumerate(vol_means.index)}
     df["regime"] = df["state"].map(state_map)
     return df, state_map
+
+

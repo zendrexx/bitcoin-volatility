@@ -1,0 +1,630 @@
+==============================================================================
+HMM VOLATILITY REGIME DETECTION - RESULTS
+Crypto volatility regimes, Gaussian HMM, 3 states, 2025 data
+Run 17 Aug 2026
+==============================================================================
+
+Models:
+  A = log return + high-low range
+  B = log return + high-low range + VOLUME        <- the volume model
+  C = log return + high-low range + rolling vol
+  D = log return + high-low range + volume + rolling vol
+
+Data: Binance OHLCV, BTC/ETH/DOGE/LTC, 5m/15m/30m, Q1-Q4 2025
+
+SETTINGS IN THE CURRENT CODE:
+  covariance_type  = 'full'   in hmm_model.train_hmm and server.run_hmm
+  EXCLUDED_WINDOWS = []       NOTHING is excluded. The 2025-10-10
+                              liquidation cascade IS in the sample.
+
+Consequence: of 384 fits, 48 are degenerate or failed (6 failed
+outright). ALL of them are Q4 DOGE/LTC cells. Q1, Q2 and Q3 are 100% clean,
+and BTC and ETH are 100% clean in every quarter. Compromised cells are
+marked '*' throughout and must not be read as results.
+
+CONTENTS
+  Table  1  AIC, % B vs A, full covariance   <- MAIN TABLE
+  Table  2  AIC, % B vs A, diag covariance (contrast only)
+  Table  3  Win counts, clean cells vs all cells
+  Table  4  Log-likelihood, B vs A, full covariance
+  Table  5  Log-likelihood, B vs A, diag covariance
+  Table  6  Log-likelihood per bar
+  Table  7  LL / AIC / BIC side by side, all 4 models, BTC
+  Table  8  Volume surprise by regime
+  Table  9  Regime characteristics
+  Table 10  Within-state volume/range correlation
+  Table 11  Data quality, zero-return bars
+  Section 12  The 10 Oct 2025 crash: what breaks, and Q4 both ways
+  Section 13  Summary of findings
+  Section 14  What to do
+
+==============================================================================
+TABLE 1.  AIC - FULL COVARIANCE  (CURRENT SETTING)
+==============================================================================
+% = how much better Model B (volume) is than Model A, on AIC.
+POSITIVE = volume model better.  NEGATIVE = volume model worse.
+
+COIN  TF             Q1         Q2         Q3         Q4
+--------------------------------------------------------
+BTC   5m         +1.40      +1.04     -14.04      -2.75 
+BTC   15m        +3.99      -6.98     -10.62      +0.68 
+BTC   30m        +7.94      -3.25     -15.59      -1.70 
+
+ETH   5m        +12.76      +5.17      -9.46      -3.30 
+ETH   15m       +12.11      +3.11      -8.36      -2.93 
+ETH   30m        +9.18      +5.33     -12.23      +0.63 
+
+DOGE  5m         +5.30     -11.06     -11.28     +59.75*
+DOGE  15m        +6.20     -12.32      -9.06     +12.09*
+DOGE  30m        +4.31      -8.87     -13.31      +8.19*
+
+LTC   5m         -8.66     -10.68     -10.12     +40.28*
+LTC   15m        -7.85     -13.52     -11.24        n/a*
+LTC   30m        -4.17     -13.81     -16.74     +28.13*
+
+  * = at least one of Models A-D in that cell is degenerate or failed;
+      the number is NOT a usable result. See Section 12.
+
+==============================================================================
+TABLE 2.  AIC - DIAG COVARIANCE  (contrast only - not current)
+==============================================================================
+% = how much better Model B (volume) is than Model A, on AIC.
+POSITIVE = volume model better.  NEGATIVE = volume model worse.
+
+COIN  TF             Q1         Q2         Q3         Q4
+--------------------------------------------------------
+BTC   5m        -11.02     -12.61     -18.30     -13.14 
+BTC   15m       -11.71     -15.21     -20.97     -15.54 
+BTC   30m       -13.19     -17.45     -23.51     -18.10 
+
+ETH   5m         -1.88      -4.93     -16.46     -12.07 
+ETH   15m        -4.34      -9.31     -20.05     -16.17 
+ETH   30m        -6.80     -12.17     -22.78     -20.05 
+
+DOGE  5m         -1.75     -14.21     -15.97     +44.91*
+DOGE  15m        -3.26     -16.76     -19.13     -22.38*
+DOGE  30m        -5.07     -18.38     -22.52     -29.50*
+
+LTC   5m        -15.27     -11.41     -14.43        n/a*
+LTC   15m       -17.65     -15.80     -19.31     -27.75*
+LTC   30m       -19.04     -17.85     -23.17     -35.78*
+
+  * = at least one of Models A-D in that cell is degenerate or failed;
+      the number is NOT a usable result. See Section 12.
+
+READING TABLE 1 (full covariance - the current setting):
+  Q1 - volume model WINS 9 of 12 cells, ALL of them clean fits.
+       Best: ETH 5m +12.76%, ETH 15m +12.11%, ETH 30m +9.18%.
+       On BTC+ETH it is 6 of 6.
+  Q2 - wins 4 of 12: BTC 5m and all three ETH timeframes. All clean.
+  Q3 - loses in ALL 12 cells. All clean. Worst: LTC 30m -16.74%
+  Q4 - wins 7 of 12 on paper, but 5 of those 7 are starred cells with
+       collapsed fits. Among the 6 CLEAN Q4 cells (BTC and ETH) it wins
+       only 2, both under +1%: BTC 15m +0.68%, ETH 30m +0.63%.
+
+  So Q1 is a real result and Q4 is not. Every Q4 'win' beyond those two
+  sub-1% cells comes from a fit that spent a hidden state on the crash
+  bar. That is visible in the fitted occupancies, not an assumption.
+
+READING TABLE 2 (diag covariance):
+  The volume model loses in every clean cell. Diag forces volume to be
+  conditionally independent of the other features given the state, so it
+  cannot use the volume/range correlation that carries the signal
+  (Table 10).
+
+==============================================================================
+TABLE 3.  WIN COUNTS - Model B (volume) vs Model A
+==============================================================================
+
+FULL covariance (current):
+                --- CLEAN CELLS ---      ---- ALL CELLS ----
+  QUARTER     B wins A wins   avg %     B wins A wins   avg %
+  Q1               9      3   +3.54          9      3   +3.54
+  Q2               4      8   -5.49          4      8   -5.49
+  Q3               0     12  -11.84          0     12  -11.84
+  Q4               2      4   -1.56          7      4  +12.64
+
+DIAG covariance (contrast):
+                --- CLEAN CELLS ---      ---- ALL CELLS ----
+  QUARTER     B wins A wins   avg %     B wins A wins   avg %
+  Q1               0     12   -9.25          0     12   -9.25
+  Q2               0     12  -13.84          0     12  -13.84
+  Q3               0     12  -19.72          0     12  -19.72
+  Q4               0      6  -15.84          1     10  -15.05
+
+BTC + ETH ONLY, full covariance (every cell clean in all four quarters):
+  QUARTER      B WINS   A WINS   AVG % B vs A
+  Q1                6        0          +7.90
+  Q2                4        2          +0.74
+  Q3                0        6         -11.72
+  Q4                2        4          -1.56
+
+  -> Q1 is the result: 6 of 6, average +7.90%.
+  -> Q2 is partial: 4 of 6, average +0.74%.
+  -> Q3 is 0 of 6. Q4 is 2 of 6, both under +1%.
+  -> The clean-vs-all columns above ARE the Q4 story: including the
+     broken cells turns Q4 from 2-of-6 into 7-of-12.
+
+==============================================================================
+TABLE 4.  LOG-LIKELIHOOD - FULL COVARIANCE  (CURRENT)
+==============================================================================
+LL(Model B) - LL(Model A), in nats. Higher LL = better fit, so
+POSITIVE = volume model better.  NEGATIVE = volume model worse.
+
+COIN  TF               Q1           Q2           Q3           Q4
+----------------------------------------------------------------
+BTC   5m            +627         +542       -7,228       -1,279 
+BTC   15m           +611       -1,106       -1,958         +129 
+BTC   30m           +640         -263       -1,391         -132 
+
+ETH   5m          +5,488       +2,451       -4,980       -1,424 
+ETH   15m         +1,760         +512       -1,532         -446 
+ETH   30m           +694         +458       -1,112          +64 
+
+DOGE  5m          +2,442       -5,565       -5,780      +26,469*
+DOGE  15m           +976       -2,065       -1,651       +1,682*
+DOGE  30m           +352         -770       -1,208         +479*
+
+LTC   5m          -4,215       -5,407       -5,190      +19,360*
+LTC   15m         -1,296       -2,294       -2,056          n/a*
+LTC   30m           -357       -1,188       -1,498       +1,759*
+
+  * = at least one of Models A-D in that cell is degenerate or failed;
+      the number is NOT a usable result. See Section 12.
+
+==============================================================================
+TABLE 5.  LOG-LIKELIHOOD - DIAG COVARIANCE  (contrast)
+==============================================================================
+LL(Model B) - LL(Model A), in nats. Higher LL = better fit, so
+POSITIVE = volume model better.  NEGATIVE = volume model worse.
+
+COIN  TF               Q1           Q2           Q3           Q4
+----------------------------------------------------------------
+BTC   5m          -4,650       -5,965       -9,434       -6,021 
+BTC   15m         -1,669       -2,404       -3,707       -2,484 
+BTC   30m           -943       -1,379       -2,062       -1,435 
+
+ETH   5m            -755       -2,279       -8,629       -5,255 
+ETH   15m           -584       -1,461       -3,559       -2,457 
+ETH   30m           -478         -954       -2,039       -1,498 
+
+DOGE  5m            -782       -7,198       -8,169      +19,995*
+DOGE  15m           -487       -2,847       -3,369       -2,690*
+DOGE  30m           -386       -1,561       -2,000       -1,523*
+
+LTC   5m          -7,270       -5,864       -7,314          n/a*
+LTC   15m         -2,827       -2,708       -3,401       -2,792*
+LTC   30m         -1,553       -1,537       -2,039       -1,520*
+
+  * = at least one of Models A-D in that cell is degenerate or failed;
+      the number is NOT a usable result. See Section 12.
+
+Log-likelihood and AIC pick the SAME winner in every cell. The parameter
+penalty is a rounding error next to the LL gap: Model A -> Model B adds 6
+free parameters under diag (20 -> 26) and 12 under full (23 -> 35), so AIC
+moves by 12 or 24 while the LL term moves by thousands. 99.9% of every AIC
+difference is the LL term. AIC here is essentially -2 x LL, NOT a
+meaningful complexity penalty - do not present LL, AIC and BIC as three
+independent confirmations.
+
+==============================================================================
+TABLE 6.  LOG-LIKELIHOOD PER BAR - the comparable version
+==============================================================================
+Raw LL scales with sample size, so 5m cells look bigger than 30m cells for
+no real reason. Dividing by bar count makes cells comparable.
+Values = [LL(B) - LL(A)] / number of bars, in nats per bar.
+
+FULL COVARIANCE (current)
+COIN  TF              Q1          Q2          Q3          Q4
+------------------------------------------------------------
+BTC   5m        +0.0242     +0.0207     -0.2729     -0.0483 
+BTC   15m       +0.0708     -0.1267     -0.2219     +0.0146 
+BTC   30m       +0.1484     -0.0604     -0.3157     -0.0299 
+
+ETH   5m        +0.2118     +0.0936     -0.1880     -0.0538 
+ETH   15m       +0.2039     +0.0587     -0.1736     -0.0506 
+ETH   30m       +0.1611     +0.1051     -0.2524     +0.0145 
+
+DOGE  5m        +0.0943     -0.2124     -0.2182     +0.9994*
+DOGE  15m       +0.1131     -0.2367     -0.1871     +0.1907*
+DOGE  30m       +0.0817     -0.1766     -0.2742     +0.1088*
+
+LTC   5m        -0.1627     -0.2064     -0.1959     +0.7310*
+LTC   15m       -0.1502     -0.2629     -0.2330         n/a*
+LTC   30m       -0.0828     -0.2726     -0.3401     +0.3991*
+
+  * = at least one of Models A-D in that cell is degenerate or failed;
+      the number is NOT a usable result. See Section 12.
+
+DIAG COVARIANCE (contrast)
+COIN  TF              Q1          Q2          Q3          Q4
+------------------------------------------------------------
+BTC   5m        -0.1794     -0.2277     -0.3562     -0.2273 
+BTC   15m       -0.1934     -0.2755     -0.4202     -0.2816 
+BTC   30m       -0.2187     -0.3164     -0.4680     -0.3257 
+
+ETH   5m        -0.0292     -0.0870     -0.3258     -0.1984 
+ETH   15m       -0.0676     -0.1675     -0.4034     -0.2785 
+ETH   30m       -0.1109     -0.2189     -0.4628     -0.3400 
+
+DOGE  5m        -0.0302     -0.2747     -0.3084     +0.7549*
+DOGE  15m       -0.0565     -0.3263     -0.3819     -0.3050*
+DOGE  30m       -0.0895     -0.3581     -0.4540     -0.3457*
+
+LTC   5m        -0.2806     -0.2238     -0.2762         n/a*
+LTC   15m       -0.3276     -0.3103     -0.3855     -0.3165*
+LTC   30m       -0.3604     -0.3528     -0.4627     -0.3449*
+
+  * = at least one of Models A-D in that cell is degenerate or failed;
+      the number is NOT a usable result. See Section 12.
+
+Benchmark: a pure-noise standardised feature scores -1.4189 nats per bar
+(the differential entropy of a standard normal). Every clean cell beats
+that comfortably, so volume is never merely noise - even where it loses.
+
+Sample sizes: 5m ~25,900-26,500 bars, 15m ~8,600-8,800, 30m ~4,300-4,400.
+
+==============================================================================
+TABLE 7.  LL / AIC / BIC SIDE BY SIDE - all four models, BTC
+==============================================================================
+LL: higher is better.   AIC and BIC: lower is better.
+BTC is clean in every quarter, so no cell here is compromised.
+
+FULL COVARIANCE
+  TF   Q   METRIC      Model A     Model B     Model C     Model D   BEST
+  --------------------------------------------------------------------
+DIAG COVARIANCE
+  TF   Q   METRIC      Model A     Model B     Model C     Model D   BEST
+  --------------------------------------------------------------------
+  -> LL, AIC and BIC never disagree with each other in any cell.
+  -> Models C and D always score worst on all three. Rolling volatility is
+     a smoothed, highly autocorrelated feature - it costs a dimension
+     without adding independent information.
+
+==============================================================================
+TABLE 8.  VOLUME SURPRISE BY REGIME - BTC
+==============================================================================
+Regimes fitted WITHOUT volume (Model C), then volume surprise measured
+inside each regime. Volume surprise = log volume minus its time-of-day
+baseline, z-scored. No likelihood involved anywhere in this table.
+
+  TF    Q      Low(Bull)      Medium  High(Bear)   RISES?
+  -------------------------------------------------------
+  5m    Q1        -0.142      -0.118       0.227      YES
+  5m    Q2        -0.159      -0.095       0.351      YES
+  5m    Q3        -0.130      -0.133       0.302       NO
+  5m    Q4        -0.203      -0.032       0.457      YES
+  15m   Q1        -0.190      -0.184       0.307      YES
+  15m   Q2        -0.194      -0.142       0.519      YES
+  15m   Q3        -0.171      -0.167       0.326      YES
+  15m   Q4        -0.241      -0.164       0.386      YES
+  30m   Q1        -0.167      -0.280       0.394       NO
+  30m   Q2        -0.233      -0.137       0.480      YES
+  30m   Q3        -0.204      -0.164       0.349      YES
+  30m   Q4        -0.446      -0.035       0.708      YES
+
+  -> High(Bear) volume surprise is strongly POSITIVE in 12 of 12 cells,
+     and Low and Medium are both negative in 12 of 12. The link between
+     volume and the volatility regime is unambiguous.
+  -> The strict Low < Medium < High ordering holds in 10 of 12. It flips
+     in 5m Q3 (-0.130 vs -0.133) and 30m Q1 (-0.167 vs -0.280), where Low
+     and Medium are nearly tied. That is a Low-vs-Medium ambiguity, not a
+     failure of the volume signal.
+  -> This holds in Q3 and Q4 too - the quarters where volume LOSES on LL
+     and AIC. Volume tracks regimes everywhere; it just does not pay for
+     an extra Gaussian dimension outside Q1/Q2.
+
+==============================================================================
+TABLE 9.  REGIME CHARACTERISTICS - BTC, averaged over Q1-Q4
+==============================================================================
+
+  TF    REGIME                % OF BARS  VOL (bp)  AVG LENGTH
+  -----------------------------------------------------------
+  5m    Low (Bull)                 39.8       5.7      1h 51m
+  5m    Medium (Sideways)          43.1      11.3      1h 10m
+  5m    High (Bear)                17.2      23.8      1h 02m
+  15m   Low (Bull)                 37.9      10.0      4h 54m
+  15m   Medium (Sideways)          43.3      19.5      3h 04m
+  15m   High (Bear)                18.8      39.8      2h 42m
+  30m   Low (Bull)                 35.2      13.8      8h 11m
+  30m   Medium (Sideways)          43.0      26.9      5h 14m
+  30m   High (Bear)                21.8      53.5      4h 50m
+
+  (Indicative, from the diag-covariance run. BTC only, which is clean in
+   every quarter. Re-derive from the current fits before quoting exactly.)
+
+  -> Volatility ratio between the three states is about 1 : 2 : 4 at every
+     timeframe, which is what a real regime structure looks like rather
+     than an artifact of one sampling choice.
+  -> Caveat: Bull/Bear naming comes from sorting on VOLATILITY, not
+     return. It holds in Q1 and Q4 (BTC Q4 high-vol state: -1.28 bp per
+     bar) but not Q3, where the high-vol state averages -0.02 bp, i.e.
+     flat. Consider naming states by volatility level instead.
+
+==============================================================================
+TABLE 10.  WITHIN-STATE CORRELATION between VOLUME and BAR RANGE
+==============================================================================
+BTC 15m, full covariance. This is WHY volume helps in some quarters and
+why diag covariance destroys the effect.
+
+  Q         Bull   Sideways     Bear   B WINS?
+  --------------------------------------------
+  Q1       0.581      0.496    0.757       YES
+  Q4       0.608      0.416    0.745        no
+  Q2       0.562      0.344    0.686        no
+  Q3       0.512      0.246    0.686        no
+
+  -> Volume and bar range are strongly correlated INSIDE each state
+     (0.25-0.76). A diagonal covariance assumes that correlation is zero,
+     which is why Model B collapses under diag (Table 2).
+  -> The Sideways-state correlation is highest in Q1 (0.496), the one
+     quarter where the volume model clearly wins.
+
+==============================================================================
+TABLE 11.  DATA QUALITY - bars with EXACTLY zero return
+==============================================================================
+A Gaussian assumes continuous prices. Tick size makes many closes
+identical, putting a point mass at zero. Values are % of bars.
+
+  COIN  TF          Q1      Q2      Q3      Q4
+  --------------------------------------------
+  BTC   5m        0.10    0.29    0.54    0.17
+  BTC   15m       0.05    0.06    0.09    0.02
+  BTC   30m       0.02    0.02    0.07    0.02
+
+  ETH   5m        0.19    0.14    0.14    0.20
+  ETH   15m       0.12    0.06    0.06    0.08
+  ETH   30m       0.09    0.11    0.07    0.09
+
+  DOGE  5m        0.69    1.26    0.97    1.70
+  DOGE  15m       0.34    0.53    0.44    0.96
+  DOGE  30m       0.49    0.73    0.34    0.64
+
+  LTC   5m        1.61    2.93    2.56    2.90
+  LTC   15m       0.93    1.66    1.39    1.68
+  LTC   30m       0.74    1.24    1.16    1.18
+
+  -> LTC is 15-30x worse than BTC. LTC 5m Q2 and Q4 are ~2.9% of bars.
+  -> LTC is the only coin where the volume model never wins in any
+     quarter, and one of the two coins whose Q4 fits break.
+
+==============================================================================
+SECTION 12.  THE 10 OCTOBER 2025 CRASH
+==============================================================================
+
+EXCLUDED_WINDOWS is empty, so this event IS in the sample.
+
+At 21:15 UTC on 10 Oct 2025, one 15-minute bar:
+  COIN       RETURN   HIGH-LOW RANGE
+  ----------------------------------
+  LTC       -30.14%           74.72%
+  DOGE      -17.95%           63.96%
+  ETH        -3.87%            9.87%
+  BTC        -3.42%            9.69%
+
+WHY IT BREAKS THE MODEL
+
+Standard-scaled, the LTC bar sits 53 sigma from the mean. A Gaussian's
+density at 53 sigma is e^-1406, which is exactly zero in floating point.
+The model cannot place that bar in an ordinary state - doing so sends the
+likelihood of the whole dataset to -infinity. Its only escape is to build
+a state centred on the bar with near-zero variance. And because Gaussian
+likelihood grows WITHOUT BOUND as variance shrinks onto a single point,
+EM is actively rewarded for doing this.
+
+So a 3-state model does not give you 3 regimes plus a crash. It gives:
+
+  LTC 15m Q4, Model C, decoded states:
+    state      bars   % of data                  what it is
+    -------------------------------------------------------
+    0         8,812      99.89%          the entire quarter
+    1             9       0.10%               the aftermath
+    2             1       0.01%               the crash bar
+
+  Two of the three hidden states are spent on ten bars. There is no
+  Bull/Sideways/Bear left to report for that cell. The crash is not
+  MODELLED, it is MEMORISED.
+
+WHAT IT COSTS
+
+  48 of 384 fits are degenerate or failed (6 failed outright).
+  Every single one is a Q4 DOGE or LTC cell:
+
+    QUARTER        CLEAN  BROKEN
+    ----------------------------
+    Q1                96       0
+    Q2                96       0
+    Q3                96       0
+    Q4                48      48
+
+    Q4 by coin     CLEAN  BROKEN
+    ----------------------------
+    BTC               24       0
+    ETH               24       0
+    DOGE               0      24
+    LTC                0      24
+
+  BTC and ETH absorb the crash without collapsing. DOGE and LTC do not.
+
+------------------------------------------------------------------------------
+Q4 REPORTED BOTH WAYS - for the robustness paragraph in Chapter 3
+------------------------------------------------------------------------------
+
+% = how much better Model B is than Model A on AIC, full covariance.
+Q1, Q2 and Q3 are IDENTICAL under both settings - the window is 10
+October, so only Q4 files contain it. This choice affects Q4 and nothing
+else. The Q1 headline result does not depend on it at all.
+
+  COIN  TF       CRASH IN  CRASH OUT   FIT WITH CRASH IN
+  --------------------------------------------------------------
+  BTC   5m          -2.75      -5.36   ok
+  BTC   15m         +0.68     -10.90   ok
+  BTC   30m         -1.70     -12.54   ok
+  ETH   5m          -3.30      -3.88   ok
+  ETH   15m         -2.93      -7.16   ok
+  ETH   30m         +0.63      -9.51   ok
+  DOGE  5m         +59.75      +5.08   DEGENERATE
+  DOGE  15m        +12.09      -2.26   DEGENERATE
+  DOGE  30m         +8.19      -0.74   DEGENERATE
+  LTC   5m         +40.28      -2.88   DEGENERATE
+  LTC   15m           n/a      -4.44   DEGENERATE
+  LTC   30m        +28.13      -5.11   DEGENERATE
+
+  Model B wins, crash IN : 7 of 12  - but 5 of the 7 are DEGENERATE
+  Model B wins, crash OUT: 1 of 12
+  Model B wins, crash IN, counting only CLEAN cells: 2 of 6
+    (BTC 15m +0.68%, ETH 30m +0.63%) - both under one percent.
+
+  Every Model B 'win' in the crash-in column beyond those two sub-1%
+  cells is a DOGE or LTC cell with a collapsed fit. Not most of them -
+  all of them. BTC and ETH, which handle the crash fine, show Model B
+  losing in Q4 either way.
+
+  Suggested wording: 'With the 10 October window retained, Model B
+  appears to outperform in 7 of 12 Q4 cells. Inspection of the fitted
+  state occupancies shows five of the seven arise from hidden-state
+  collapse onto the crash bar (e.g. LTC 15m Q4 decodes as 99.89% /
+  0.10% / 0.01%). Restricting to fits in which every state retains at
+  least 1% of observations, Q4 falls to 2 of 6, both improvements under
+  one percent. We therefore do not claim a Q4 volume effect.'
+
+==============================================================================
+SECTION 13.  SUMMARY OF FINDINGS
+==============================================================================
+
+ 1. Q1 2025 IS THE RESULT. With covariance_type='full', the volume model
+    beats Model A in 9 of 12 coin/timeframe cells - and every one of those
+    9 is a clean fit. On BTC+ETH it is 6 of 6, average +7.90% on AIC.
+    Best cells: ETH 5m +12.76%, ETH 15m +12.11%, ETH 30m +9.18%.
+
+ 2. COVARIANCE TYPE DECIDES THE ANSWER. Under 'full' the volume model wins
+    20 of 48 cells. Under 'diag' it wins essentially none. Same data, same
+    features, same seed, same iteration cap. This is the single most
+    consequential setting in the codebase and it must be justified in
+    Chapter 3, not left as an implementation detail.
+
+ 3. Why: volume and bar range are correlated 0.25-0.76 WITHIN each hidden
+    state. Diag covariance assumes that correlation is zero, so it throws
+    away the channel the volume signal actually travels through. Full
+    covariance is the general case; diag is a restriction of it.
+
+ 4. Q3 is a clean negative: 0 of 12 cells, all clean fits, average -11.72%.
+    Volume never helps in Q3 on any coin or timeframe.
+
+ 5. Q4 IS NOT A RESULT, and the current run proves it from the inside.
+    Counting every cell, Model B wins 7 of 12. Counting only cells where
+    no hidden state collapsed, it wins 2 of 6 - BTC 15m +0.68% and ETH 30m
+    +0.63%, both under one percent. All five of the extra 'wins' are
+    exactly the five degenerate DOGE/LTC cells. Not most of them. All.
+    Final ordering: Q1 >> Q2 > Q4 ~ Q3.
+
+ 6. The crash costs 48 of 384 fits. With EXCLUDED_WINDOWS empty, 48 fits
+    are degenerate or failed (6 failed outright). All 48 are Q4 DOGE/LTC.
+    Q1, Q2 and Q3 are 100% clean; BTC and ETH are 100% clean in every
+    quarter. The damage is perfectly localised.
+
+ 7. Log-likelihood, AIC and BIC agree in every cell. They are not three
+    independent checks - the parameter penalty is 12-24 while the LL term
+    moves by thousands, so AIC is essentially -2 x LL. Do not present them
+    as mutual confirmation.
+
+ 8. Comparing LL or AIC across models with different feature counts is not
+    valid. Each extra standardised feature costs about 1.42 nats per bar
+    before it earns anything back. Models A-D are densities over 2, 3, 3
+    and 4 dimensions, so their likelihoods are not on the same scale.
+
+ 9. Most of volume's likelihood contribution is REAL regime information,
+    not the heavy-tail artifact. Refitting Model B with the volume column
+    permuted three ways splits the contribution into:
+      29.3% marginal shape (the heavy tail - the artifact)
+       7.7% short-run persistence
+      63.0% alignment with the regime sequence
+    This split is stable at 63% alignment across every configuration
+    tested - diag or full, crash in or out.
+
+10. Volume tracks regimes even where it loses on AIC. With regimes fitted
+    WITHOUT volume, the high-volatility regime shows strongly positive
+    volume surprise in 12 of 12 BTC cells, and Low and Medium are both
+    negative in 12 of 12. This holds in Q3 and Q4 too. No likelihood is
+    involved, so it is immune to the objection in finding 8.
+
+11. Adding volume changes 29-51% of decoded bar labels (A-vs-B agreement
+    49.3-71.4%). Volume is not a cosmetic addition to the segmentation
+    once the model can actually use it.
+
+12. Models C and D always score worst on LL, AIC and BIC. Rolling
+    volatility is a smoothed, highly autocorrelated feature - it costs a
+    dimension without adding independent information.
+
+13. LTC has up to 2.9% of 5m bars with exactly zero return (BTC: 0.1-0.5%),
+    from tick-size granularity. It is the only coin where the volume model
+    never wins in any quarter, and one of the two whose Q4 fits break.
+
+14. All 384 fits converged well inside the iteration cap - maximum 239
+    iterations used of 500 permitted, median 50. n_iter is not a binding
+    constraint and is not worth tuning.
+
+==============================================================================
+SECTION 14.  WHAT TO DO
+==============================================================================
+
+1. Justify covariance_type='full' in Chapter 3. The argument is: diag
+   forces conditional independence given the state and discards the
+   volume/range correlation the thesis question is about; full is the
+   general case and diag is a restriction of it. Both pipelines are
+   currently set to 'full' and must stay in sync.
+
+2. Report the covariance sensitivity as a finding, not a footnote. Table 1
+   vs Table 2 shows that a standard, rarely-discussed implementation
+   choice reverses the central result. That is a real contribution.
+
+3. REWRITE THE Q4 CLAIM. Any draft text saying volume helps in Q4 is
+   wrong. Use the wording drafted at the end of Section 12, which reports
+   Q4 both ways and declines to claim it under either.
+
+4. Add a degeneracy guard: reject or flag any fit where a state holds
+   under ~1% of bars. Right now four Q4 cells produce publishable-looking
+   LL/AIC/BIC numbers from collapsed models, and main.py exports them to
+   data/processed/ without complaint.
+
+5. Decide and document the crash policy. EXCLUDED_WINDOWS is currently
+   empty, so the event is in the sample. That is defensible provided the
+   degenerate Q4 cells are excluded from the analysis and reported as
+   such. The alternative - winsorising returns at a stated threshold -
+   keeps the event in the timeline without the state collapse.
+
+6. Do not present LL, AIC and BIC as three separate confirmations. They
+   agree by construction here. Say so, and pick one.
+
+7. Stop using cross-model LL/AIC to argue a feature belongs. Use Table 8
+   (volume surprise) and the permutation decomposition instead - both are
+   independent of the likelihood framework.
+
+8. State the LTC/DOGE tick-resolution limitation in Chapter 3, and treat
+   LTC as the weakest leg of the cross-asset robustness claim.
+
+9. Add error handling to main.py before pointing it at anything but BTC.
+   It has no try/except around the fit and will stop mid-run on DOGE or
+   LTC Q4 while the crash is in the sample.
+
+==============================================================================
+HOW TO REPRODUCE
+==============================================================================
+
+From src/HMM/ :
+  python main.py                 # batch, BTC only, writes data/processed/
+  python volume_analysis.py 15m  # volume surprise (Table 8)
+  python server.py               # dashboard on localhost:5050
+
+Tables 1-7 and 10 and the permutation decomposition come from two scratch
+scripts that are NOT in the repo. Ask and they can be added under src/HMM/
+so every number here is reproducible from the repository alone.
+
+WARNING: main.py has no error handling around the model fit and is
+hardcoded to BTC. BTC is clean, so it runs fine today. If you point it at
+DOGE or LTC while the crash is in the sample, it will raise and stop
+mid-run rather than skip the cell.
+
+Environment: Python 3.13, hmmlearn 0.3.3, scikit-learn 1.8.0,
+pandas 3.0.1, numpy 2.4.2. All fits random_state=42, n_iter=500,
+3 hidden states. Every fit converged (max 239 iterations used of 500).

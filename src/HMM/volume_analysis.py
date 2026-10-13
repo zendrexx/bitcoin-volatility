@@ -7,6 +7,7 @@ from data_loader import load_binance_json
 from feature_engineering import MODEL_BUILDERS
 from hmm_model import train_hmm, predict_states, label_regimes
 
+COINS           = ["btc", "eth", "doge", "ltc"]
 QUARTERS        = ["Q1", "Q2", "Q3", "Q4"]
 VOL_WINDOW      = 10
 SEASONAL_DAYS   = 20   # sessions used for the time-of-day volume baseline
@@ -27,29 +28,30 @@ def add_volume_surprise(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def run(tf: str = "15m"):
-    print(f"Volume surprise by regime — regimes fitted WITHOUT volume (Model C, BTC {tf})")
-    print(f"{'Q':<4}{'Low (Bull)':>12}{'Medium':>12}{'High (Bear)':>13}{'monotone':>10}")
+def run(tf: str = "15m", coins=COINS):
+    for coin in coins:
+        print(f"\nVolume surprise by regime — regimes fitted WITHOUT volume (Model C, {coin.upper()} {tf})")
+        print(f"{'Q':<4}{'Low (Bull)':>12}{'Medium':>12}{'High (Bear)':>13}{'monotone':>10}")
 
-    for q in QUARTERS:
-        path = find_file(tf, q)
-        if path is None:
-            print(f"{q:<4}  [no data file]")
-            continue
+        for q in QUARTERS:
+            path = find_file(tf, q, coin=coin)
+            if path is None:
+                print(f"{q:<4}  [no data file]")
+                continue
 
-        df_raw = load_binance_json(path)
-        df, X = MODEL_BUILDERS["C"](df_raw, vol_window=VOL_WINDOW)
-        model = train_hmm(X, n_states=3)
-        states = predict_states(model, X)
-        df, _ = label_regimes(df, states)
-        df = add_volume_surprise(df)
+            df_raw = load_binance_json(path)
+            df, X = MODEL_BUILDERS["C"](df_raw, vol_window=VOL_WINDOW)
+            model = train_hmm(X, n_states=3)
+            states = predict_states(model, X)
+            df, _ = label_regimes(df, states)
+            df = add_volume_surprise(df)
 
-        means = df.groupby("regime")["volume_z"].mean()
-        low  = means.get("Low (Bull)", np.nan)
-        mid  = means.get("Medium (Sideways)", np.nan)
-        high = means.get("High (Bear)", np.nan)
-        mono = "yes" if low < mid < high else "no"
-        print(f"{q:<4}{low:>12.3f}{mid:>12.3f}{high:>13.3f}{mono:>10}")
+            means = df.groupby("regime")["volume_z"].mean()
+            low  = means.get("Low (Bull)", np.nan)
+            mid  = means.get("Medium (Sideways)", np.nan)
+            high = means.get("High (Bear)", np.nan)
+            mono = "yes" if low < mid < high else "no"
+            print(f"{q:<4}{low:>12.3f}{mid:>12.3f}{high:>13.3f}{mono:>10}")
 
 
 if __name__ == "__main__":

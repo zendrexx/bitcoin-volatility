@@ -47,6 +47,12 @@ def load_file(coin: str, tf: str, quarter: str) -> pd.DataFrame | None:
     return df.sort_values("time").reset_index(drop=True)
 
 
+def epoch_milliseconds(values: pd.Series) -> list[int]:
+    """Return UTC timestamps as milliseconds, independent of pandas' datetime unit."""
+    times = pd.to_datetime(values, utc=True).dt.tz_convert(None)
+    return times.astype("datetime64[ms]").astype("int64").tolist()
+
+
 EXCLUDED_WINDOWS = [
     ("2025-10-10 20:00:00", "2025-10-11 04:00:00"),  # liquidation cascade; collapses hidden states under full covariance
 ]
@@ -107,15 +113,21 @@ def compute_metrics(model: GaussianHMM, X: np.ndarray) -> dict:
         "n_obs":          int(n),
     }
 
-def run_hmm(coin: str, tf: str, quarter: str, n_states: int) -> list[dict]:
+def run_hmm(coin: str, tf: str, quarter: str, n_states: int) -> tuple[list[dict], dict | None]:
     df_raw = load_file(coin, tf, quarter)
     if df_raw is None:
-        return []
+        return [], None
     df = base_features(df_raw)
     if len(df) < n_states * 20:
-        return []
+        return [], None
 
     results = []
+    regime_series = {
+        "timestamps": epoch_milliseconds(df["time"]),
+        "models": {},
+        "price_timestamps": epoch_milliseconds(df_raw["time"]),
+        "close_prices": df_raw["close"].astype(float).tolist(),
+    }
     for model_id, feature_fn in MODELS.items():
         try:
             X = feature_fn(df)
@@ -137,6 +149,7 @@ def run_hmm(coin: str, tf: str, quarter: str, n_states: int) -> list[dict]:
                     "degenerate": True,
                     "state_occupancy": occupancy.round(4).tolist(),
                 })
+                regime_series["models"][model_id] = [None] * len(states)
                 continue
 
             metrics = compute_metrics(hmm, X)
@@ -150,6 +163,10 @@ def run_hmm(coin: str, tf: str, quarter: str, n_states: int) -> list[dict]:
             elif n == 3: names = ["Bull","Sideways","Bear"]
             else:        names = [f"Regime {i}" for i in range(n)]
             state_map = {s: names[i] for i,s in enumerate(vol_order)}
+            regime_order = {state: tier for tier, state in enumerate(vol_order)}
+            regime_series["models"][model_id] = [
+                int(regime_order[int(state)]) for state in states
+            ]
 
             results.append({
                 "coin":        coin.upper(),
@@ -164,11 +181,12 @@ def run_hmm(coin: str, tf: str, quarter: str, n_states: int) -> list[dict]:
                 "means":       hmm.means_.round(6).tolist(),
             })
         except Exception as e:
+            regime_series["models"][model_id] = [None] * len(df)
             results.append({
                 "coin": coin.upper(), "timeframe": tf, "quarter": quarter,
                 "model": f"Model {model_id}", "error": str(e)
             })
-    return results
+    return results, regime_series
 
 # ── Routes ────────────────────────────────────────────────────────────────
 @app.route("/")
@@ -197,25 +215,52 @@ def api_run():
     n_states = int(request.args.get("states", 3))
 
     all_results = []
+    regime_series = {}
     available   = []
     missing     = []
 
     for q in QUARTERS:
-        rows = run_hmm(coin, tf, q, n_states)
+        rows, series = run_hmm(coin, tf, q, n_states)
         if rows:
             all_results.extend(rows)
             available.append(q)
         else:
             missing.append(q)
+        if series is not None:
+            regime_series[q] = series
 
     return jsonify({
         "results":   all_results,
+        "regime_series": regime_series,
         "available": available,
         "missing":   missing,
         "coin":      coin.upper(),
         "tf":        tf,
         "n_states":  n_states,
     })
+
+@app.route("/api/characteristics")
+def api_characteristics():
+    """Raw descriptive stats per quarter — no HMM, no regime. Answers RQ1/RQ3 directly."""
+    coin = request.args.get("coin", "btc").lower()
+    tf   = request.args.get("tf", "15m")
+
+    quarters = {}
+    for q in QUARTERS:
+        df_raw = load_file(coin, tf, q)
+        if df_raw is None:
+            continue
+        df = base_features(df_raw)
+        quarters[q] = {
+            feat: {
+                "mean": round(float(df[feat].mean()), 6),
+                "std":  round(float(df[feat].std()), 6),
+                "skew": round(float(df[feat].skew()), 2),
+                "kurt": round(float(df[feat].kurt()), 2),
+            }
+            for feat in ["log_return", "high_low_range", "volume", "rolling_vol"]
+        }
+    return jsonify({"coin": coin.upper(), "tf": tf, "quarters": quarters})
 
 @app.route("/api/files")
 def api_files():

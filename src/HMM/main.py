@@ -16,10 +16,10 @@ DATA_DIR     = "data/raw"
 MODEL_NAMES  = ["A", "B", "C", "D"]
 
 
-def find_file(tf: str, q: str) -> str | None:
+def find_file(tf: str, q: str, coin: str = "btc") -> str | None:
     if not os.path.isdir(DATA_DIR):
         return None
-    target = f"btc_{tf}_{q}_{YEAR}.json".lower()
+    target = f"{coin}_{tf}_{q}_{YEAR}.json".lower()
     for fname in os.listdir(DATA_DIR):
         if fname.lower() == target:
             return os.path.join(DATA_DIR, fname)

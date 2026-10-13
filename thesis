@@ -1,0 +1,238 @@
+
+
+Cryptocurrency Volatility Regime Detection Using Hidden Markov Models
+
+A Thesis Presented to the Faculty of the
+Department of Computer Science
+Pangasinan State University
+Lingayen Campus
+
+In Partial Fulfillment
+of the Requirements for the Degree
+Bachelor of Science in Computer Science
+
+Submitted by:
+ADVERSALO, ZENDREX O.
+ADVERSALO, JHEANLYN S.
+ABALOS, ASHLEY A.
+CRUZ, CHRISTINE ANGELI B.
+BATI, CARL YRON B.
+
+
+MAY 2026
+Chapter 1
+Project Overview
+Background of the Study
+Technology has reshaped how people store and exchange value, and invest financial assets leading to the rapid development of cryptocurrencies as an alternative form of digital finance. Cryptocurrencies are digital assets that enable value transfer without relying on traditional intermediaries such as banks or governments. Instead, they operate on decentralized networks that use cryptography to ensure secure and reliable transactions (Catalini & Gans, 2016). Studies show that cryptocurrencies are highly interconnected, with prices often moving together, while their relationship with traditional financial assets remains unstable (Corbet et al., 2018). This reflects the speculative and still-developing nature of the cryptocurrency market, contributing to irregular price behavior. Despite these risks, cryptocurrencies offer benefits such as lower transaction costs and increased financial inclusion for individuals with limited access to banking services. 
+Globally cryptocurrencies have become increasingly recognized as alternative financial assets and digital payment instruments. Major cryptocurrencies such as Bitcoin, Ethereum, Dogecoin, and Litecoin are among the most widely traded and recognized digital currencies worldwide. These cryptocurrencies are used for various purposes including online transactions, decentralized finance and digital asset investments. According to (Jacobs, 2018), the global adoption of cryptocurrencies presents both opportunities and challenges, particularly in governance and regulation, as decentralized digital assets operate across borders without centralized control. Bitcoin is considered the first and most dominant cryptocurrency and is commonly viewed as digital gold due to its fixed supply and high market capitalization. Ethereum introduced smart contract functionality that enabled decentralized applications and blockchain-based financial systems, significantly expanding the practical applications of cryptocurrency technology. Meanwhile, Dogecoin gained popularity through online communities and social media influence, demonstrating how market sentiment and public attention can strongly affect cryptocurrency prices. Litecoin, often referred to as a lighter version of Bitcoin, was developed to provide faster transaction processing and lower transaction costs. These cryptocurrencies differ in market structure, trading activity and investor behavior making them suitable for volatility analysis.
+ In the Philippines, cryptocurrency adoption has also increased significantly in recent years due to growing accessibility of online trading platforms. (Yasay, 2021), notes that cryptocurrencies in the Philippines have gained traction primarily among young investors and online communities caused by play-to-earn blockchain games and digital trading platforms. According to (Bangko Sentral ng Pilipinas, 2017), virtual assets are recognized as alternative investment instruments. (Doblas et al., 2024) further observed that while cryptocurrency adoption in the Philippines continues to increase, investors remain concerned about market volatility, financial risk, and limited regulatory understanding. Cryptocurrency usage in the country became more visible during the rise of play-to-earn blockchain games and online trading communities, which introduced many Filipinos to digital assets and cryptocurrency exchanges. This increasing local adoption reflects the growing role of cryptocurrencies within the Philippine digital economy despite concerns regarding market volatility.
+The increasing popularity of cryptocurrencies has also attracted the attention of financial regulators and government agencies in the Philippines. The Bangko Sentral ng Pilipinas (BSP) has issued guidelines for Virtual Asset Service Providers (VASPs) to regulate cryptocurrency-related activities and reduce risks associated with money laundering, fraud, and financial instability (Bangko Sentral ng Pilipinas, 2017; SEC Philippines, 2023). Similarly, the Securities and Exchange Commission (SEC) continues to remind the public about the risks of investing in highly volatile digital assets (SEC Philippines, 2023). These developments indicate that while cryptocurrency adoption is increasing, concerns regarding market uncertainty and investor protection remain significant. The presence of regulatory attention further highlights the importance of studying cryptocurrency volatility and market behavior to support informed financial decision-making.
+Volatility is defined as the variability of asset returns over time and serves as a key indicator of market uncertainty in the financial market (Liu, J., Serletis, A., 2019; Katsiampa 2017). It reflects the degree of price fluctuation from the average price in a given period and measures the unpredictability of an asset's price behavior. When a price changes rapidly, volatility is high indicating a greater likelihood of large price movements and when it changes slowly, volatility is low (Liu, J., Serletis, A., 2019). This characteristic is relevant for short-term traders and investors in Bitcoin markets, where rapid price movements can significantly affect trading outcomes. (Chu et al., 2017) explain that volatility is time-varying and tends to change depending on market conditions, meaning that it is not stable but dynamic. In addition, (Catania & Grassi, 2017) emphasizes that volatility often occurs in clusters, where high volatility periods tend to follow other high volatility periods, while low volatility periods tend to persist. This shows that volatility is not randomly distributed but follows observable patterns over time. Furthermore, (Bouri and Gupta, 2019) note that volatility in financial markets is influenced by market conditions, indicating that volatility is dynamic. Their findings support that volatility is not only statistical property but also a practical concern, as it increases financial risk and decision-making in cryptocurrency trading.
+Financial markets often transition between different market conditions known as volatility regimes. A volatility regime refers to a specific period in which the market exhibits relatively stable or unstable price behavior (Ardia et al., 2019; Alexander & Dakos, 2020). Low-volatility regimes are generally associated with stable market conditions and smaller price fluctuations, while high-volatility regimes are characterized by rapid price changes, uncertainty, and increased trading risk. In cryptocurrency markets, volatility regimes can shift suddenly due to market sentiment, speculative trading, global economic events, and social media influence. Detecting these changes is important because it allows investors, traders, and researchers to better understand market behavior and identify periods of increased financial risk.
+Several studies have analyzed cryptocurrency volatility using different market indicators and statistical approaches. Commonly used indicators include logarithmic returns and high-low price ranges, which measure the magnitude and variability of price movements over time. Logarithmic returns are widely used in financial analysis because they effectively capture continuous price changes and provide desirable statistical properties for time-series modeling (Chu et al., 2017). Similarly, the high-low price range reflects intraperiod price movements and provides additional information regarding market fluctuations within a trading interval. A recent study published in the Asian Journal of Probability and  Statistics utilized log returns and high-low price range as the primary indicators for cryptocurrency volatility analysis. While these indicators are commonly used in financial modeling, cryptocurrency markets are also heavily influenced by trading activity and changing  market conditions, and additional indicators may improve volatility analysis. Trading volume is considered an important market indicator because it reflects the level of market participation and investor activity during a trading period. Higher trading volume is often associated with stronger market movements and increased volatility (Balcilar et al., 2017). Similarly, rolling volatility, which measures the standard deviation of returns over a moving window, provides a dynamic representation of changing market risk over time. Unlike static volatility measures, rolling volatility captures short-term fluctuations and evolving market behavior more effectively. These indicators may provide additional information that improves the analysis of cryptocurrency volatility across different market conditions.
+Financial time series, particularly in cryptocurrency markets, exhibit nonlinear and time-varying behavior that cannot be fully captured using traditional linear models. Studies such as (Katsiampa, 2017; Lahmiri & Bekiros, 2019) emphasize that cryptocurrency returns are characterized by heavy tails, volatility clustering, and abrupt structural changes. These properties make volatility modeling more complex compared to traditional financial assets. In addition, the cryptocurrency market is relatively young and less efficient, meaning that price formation is heavily influenced by speculative trading rather than fundamental valuation (Corbet et al., 2019). As a result, volatility tends to shift rapidly between stable and unstable periods, making static models less effective in capturing market behavior.
+Many studies employ Hidden Markov Models (HMM), a statistical model used in financial time-series analysis to examine patterns and changes in market behavior using observable data such as asset returns and volatility indicators. HMM is capable of modeling time-varying and nonlinear financial behavior, making it suitable for analyzing complex and highly volatile markets such as cryptocurrencies. According to (Alexander and Dakos, 2020), regime-switching models such as HMM are effective in capturing changes in market behavior over time. Similarly, (Ardia et al., 2019) emphasized that financial assets often exhibit varying volatility dynamics under different market conditions. Recent studies have also applied HMM in cryptocurrency analysis. (Kang & Hwang, 2023) utilized HMM with stochastic volatility on Bitcoin return data, while (Pennoni et al., 2022) applied HMM in cryptocurrency markets to analyze changing market behavior. These studies demonstrate the applicability of HMM in cryptocurrency volatility analysis. In this context, HMM provides a useful framework for analyzing and comparing the effectiveness of different market indicators in capturing volatility behavior over time.
+Compared to traditional statistical models such as ARIMA and GARCH, Hidden Markov Models provide greater flexibility in modeling hidden market states and regime transitions (Katsiampa, 2017; Ardia et al., 2019; Kang & Hwang, 2023). Traditional models primarily focus on forecasting volatility values but may struggle to identify sudden shifts in market behavior. In contrast, HMM can classify financial data into hidden states representing different volatility conditions, allowing the model to detect transitions between stable and unstable market periods more effectively. This capability makes HMM particularly suitable for cryptocurrency markets where volatility changes rapidly and unpredictably.
+Existing studies primarily focus on examining cryptocurrency volatility using limited indicators. However, cryptocurrencies differ significantly in terms of market capitalization, liquidity, trading activity and investor behavior. As a result, volatility patterns may vary across different cryptocurrencies such as Bitcoin, Ethereum, Dogecoin and Litecoin. Comparing multiple cryptocurrencies allows a broader understanding of cryptocurrency market behavior and helps determine whether volatility indicators perform consistently across different digital assets. Comparing several cryptocurrencies therefore provides a broader understanding of cryptocurrency market behavior and addresses the gap in cross-cryptocurrency volatility analysis. In addition, many studies do not analyze volatility behavior across different time periods. Dividing historical market data into quarterly periods allows the study to examine whether volatility behavior remains consistent or changes across different time segments. This approach provides a clearer analysis of market fluctuations and feature performance throughout the one-year dataset. Furthermore, existing studies often rely on lower-frequency market data, leaving limited analysis of volatility behavior in shorter trading intervals where rapid market changes are more visible. The use of high-frequency cryptocurrency market data addresses this gap by allowing volatility behavior to be examined in shorter trading intervals where rapid market changes are more visible. Financial data collected at 5-minute, 15-minute, and 30-minute intervals can provide more detailed information regarding short-term market fluctuations and trading activity compared to lower-frequency data.
+To address these gaps, this study aims to analyze cryptocurrency volatility using historical market data collected from Binance through the application of Hidden Markov Model (HMM). Specifically the study compares the effectiveness of traditional indicators such as log returns and high-low price range with additional indicators including volume and rolling volatility. The study focuses on major cryptocurrencies namely Bitcoin, Ethereum, Dogecoin, and Litecoin using one year historical data divided into quarterly periods. Through this approach, the study seeks to determine whether the additional indicators provide better insights into cryptocurrency volatility behavior across different cryptocurrencies and time periods. 
+Statement of the Problem
+Cryptocurrency markets are highly volatile due to rapid price fluctuations, speculative trading and changing market conditions. Existing studies commonly utilize indicators such as logarithmic returns and high-low price ranges to analyze cryptocurrency volatility. However, limited studies investigate whether additional market indicators can provide better insights into volatility behavior across multiple cryptocurrencies. Furthermore, since cryptocurrencies exhibit different trading characteristics and market behavior, additional analysis is necessary to determine whether volatility indicators perform consistently across different digital assets and time periods.
+Specifically, this study aims to address the following gaps:
+1. What are the volatility characteristics of Bitcoin, Ethereum, Dogecoin and Litecoin using log returns, high-low price range, trading volume and rolling volatility?
+2. What improvements do trading volume and rolling volatility provide in cryptocurrency volatility analysis compared to using only logarithmic returns and high-low price range?
+3. What differences can be observed in the volatility patterns of Bitcoin, Ethereum, Dogecoin and Litecoin across different quarterly periods within the one-year dataset?
+Objectives of the Study
+Understanding the factors associated with cryptocurrency volatility can provide valuable insights into market behavior and trading activity. The general objective of the study is to analyze cryptocurrency volatility using selected market indicators and evaluate the effectiveness of additional features across multiple cryptocurrencies.
+Specifically, this study aims to: 
+1.Analyze the volatility characteristics of Bitcoin, Ethereum, Dogecoin and Litecoin using logarithmic returns, high-low price range, trading volume, and rolling volatility.
+2. Compare the effectiveness of traditional indicators (log returns and high-low price range) and additional indicators (trading volume and rolling volatility) in analyzing cryptocurrency volatility.
+ 3. Examine volatility behavior across different quarterly periods within the one-year dataset for Bitcoin, Ethereum, Dogecoin and Litecoin.
+
+Scope and Delimitation
+This study focuses on the analysis of cryptocurrency volatility using historical market data collected from Binance. The study includes four cryptocurrencies namely Bitcoin, Ethereum, Dogecoin and Litecoin. Historical market data consisting of open, high, low, close and volume (OHCLV) information will be utilized for volatility analysis. The study will use a one-year dataset that will be divided into four quarterly periods. This segmentation is intended to examine changes in volatility behavior and feature performance across different time periods. The study focuses on analyzing the effectiveness of selected market indicators in representing cryptocurrency volatility.
+The study is limited only to historical cryptocurrency market data obtained from Binance and does not incorporate external factors such as news sentiment, macroeconomic events and geopolitical influences. In addition, the study only covers selected cryptocurrencies and does not generalize findings to all digital assets in the cryptocurrency market.
+
+
+Significance of the study
+This study  evaluates the effectiveness of additional market indicators in cryptocurrency volatility analysis using Hidden Markov Models (HMM). By comparing traditional indicators with enhanced feature sets, the study provides additional insights into cryptocurrency market behavior across multiple digital assets and time periods.
+
+This study is significant to the following: 
+1. Traders
+Short-term traders operate in highly volatile environments where rapid price changes can lead to significant gains or losses. The study may help traders understand cryptocurrency market behavior by identifying volatility characteristics associated with different market indicators and trading activity.
+2. Investors
+The study provides investors with additional insights regarding cryptocurrency market uncertainty and volatility behavior across different cryptocurrencies.
+3. Researchers
+This study contributes to existing literature on cryptocurrency volatility analysis by comparing traditional and additional market indicators using Hidden Markov Models across multiple cryptocurrencies.
+4. Financial Technology Developers
+ The study provides a reference for developing analytical tools that incorporate feature-based cryptocurrency volatility analysis.
+5. Academic Community
+The study adds to the growing research in cryptocurrency modeling and demonstrates how statistical models such as Hidden Markov Models can be applied in high-frequency financial environments, particularly in understanding dynamic market behavior.
+Definition of Terms
+Below are the technical and operational definitions used in this study:
+Akaike Information Criterion
+A statistical criterion used for model selection that evaluates the goodness of fit of a model while penalizing excessive complexity.
+This refers to the statistical measure that will be used in this study to determine the optimal number of hidden volatility states in the Hidden Markov Model by comparing competing models with different state configurations.
+Baum-Welch Algorithm
+A specialized Expectation-Maximization algorithm for training Hidden Markov Models by estimating hidden state probabilities and updating model parameters iteratively.
+This refers to the algorithm that trains the Hidden Markov Model and learns the hidden volatility structure of the Bitcoin market from historical data.
+Bayesian Information Criterion
+A statistical model selection criterion that evaluates model fit while applying a stronger penalty for model complexity compared to AIC.
+This refers to the statistical criterion used to prevent overfitting during model selection.
+Close price
+The final traded price of an asset within a specified trading interval.
+This refers to the price recorded at the end of each trading interval and serves as the basis for calculating logarithmic returns.
+Expectation-Maximization Algorithm
+An iterative optimization algorithm that estimates parameters in statistical models involving hidden or incomplete data.
+This refers to the optimization process that estimates the parameters of the Hidden Markov Model, including transition probabilities and state distributions based on observed Bitcoin market data.
+Hidden Markov Model (HMM)
+A statistical model used to predict sequences of data by modeling systems with hidden, unobservable states that influence observable outcomes.
+This refers to a statistical model that will be used to identify hidden market conditions or volatility levels using observed price data.
+Highest Price
+The maximum traded price of an asset during a specific trading interval.
+This refers to the highest price recorded within each 5-minute, 15-minute, or 30-minute period and will be used to measure short-term price fluctuations and contribute to volatility assessment.
+High-Frequency Price Data
+Tick-by-tick information in financial markets, recording every transaction price, quote, and order book update, often at sub-millisecond precision.
+This refers to price data recorded at short time intervals (5-minute, 15-minute, and 30-minute).
+Log-returns
+The logarithmic transformation of price ratios between consecutive time periods used to measure asset returns continuously over time.
+This refers to the transformed cryptocurrency price returns computed from consecutive closing prices and used as the primary input feature for volatility modeling.
+Lowest Price
+The minimum traded price of an asset during a specific trading interval.
+This refers to the lowest price reached within each 5-minute, 15-minute, or 30-minute period and will be used to assess intraperiod price variability and the high-low price range.
+Short-Term Trading
+Trading strategies in stock market or futures market in which the time duration between entry and exit is within a range of few days to few weeks.
+This refers to the trading activities conducted within short time intervals (5, 15 and 30 minutes), where decisions are made based on rapid price movements and changing market volatility.
+Trading Volume
+The total quantity of an asset traded within a specific time interval.
+This refers to the amount traded during each 5-minute, 15-minute, or 30-minute interval and will be used  as an indicator of market activity and trading intensity.
+Viterbri Algorithm
+A dynamic programming algorithm used in Hidden Markov Models to find the most likely sequence of hidden states known as Viterbri path that explains a sequence of observed events.
+This refers to the algorithm that identifies the most likely volatility regime sequence (low, medium, or high volatility) for each time interval in the Bitcoin market data.
+Volatility
+The quality or state of being volatile, such as a tendency to change quickly and unpredictably.
+This refers to the magnitude of cryptocurrency price fluctuations observed within specific trading intervals.
+Volatility Clustering
+A financial phenomenon where high-volatility periods tend to cluster together, followed by more high volatility, while calm periods are followed by continued low volatility.
+This refers to the pattern where large price changes are followed by large changes, and small changes are followed by small changes.
+Volatility Regime
+The market environment based on the intensity of price fluctuations, typically clustering into low, medium, or high volatility states.
+This refers to a specific state of market volatility based on the degree of price fluctuations and identified using the Hidden Markov Model.
+Open price
+The first traded price of an asset within a specified trading interval.
+This refers to the initial price recorded at the beginning of each 5-minute, 15-minute, or 30-minute interval used in the dataset.
+
+
+
+
+
+
+
+Chapter 2
+METHODOLOGY
+Research design
+This study employs a quantitative research design focused on cryptocurrency volatility analysis using a Hidden Markov Model (HMM). It examines volatility behavior across Bitcoin, Ethereum, Dogecoin, and Litecoin using high-frequency market data, with emphasis on comparative analysis of volatility patterns and model performance across different feature sets, time intervals, and quarterly periods. 
+The Hidden Markov Model serves as the core machine learning and statistical model of the study. Instead of predicting exact prices, the model is designed to identify underlying volatility regimes by analyzing statistical patterns present in market data. This approach enables the identification of changing market risk and regime transitions over time.
+The study utilizes one year of historical cryptocurrency market data from January 2025 to December 2025. High-frequency OHLCV (Open, High, Low, Close, Volume) data represented through 5-minute, 15-minute, and 30-minute intervals will be used to capture short-term market fluctuations at different temporal granularities. 
+To further assess the robustness of the model, multi-timeframe analysis will be conducted using 5-minute, 15-minute, and 30-minute intervals.
+The overall methodology consists of data collection, preprocessing, feature engineering, Quarterly Segmentation, Multi-Time Frame Analysis,  Hidden Markov Model training, and model evaluation.
+
+                                                                                                                                                                   
+
+
+
+
+
+
+
+
+
+
+                                                  Figure 1. Machine learning Phases
+This Phases illustrates an end-to-end pipeline for identifying volatility regime using a Hidden Markov Model (HMM). It shows the process from data collection and feature engineering to quarterly segmentation, multi-timeframe analysis, HMM training and model evaluation & comparative analysis.
+
+Data Collection
+Historical cryptocurrency market data will be collected from Binance covering the period from January 2025 to December 2025. The study focuses on four major cryptocurrencies, namely Bitcoin, Ethereum, Dogecoin, and Litecoin. These cryptocurrencies were selected due to their high market activity, trading popularity, and differing market characteristics, making them suitable for comparative volatility analysis. 
+The dataset will consist of Open, High, Low, Close (OHLC) prices and trading volume, providing a complete representation of price movement and market activity within each time interval. From this dataset, the primary variable used for modeling will be the logarithmic return computed from closing prices, defined as: 
+rt​=ln(Pt/Pt−1​) where Ptt​ represents the closing price at time t, and Pt−1 represents the previous closing price.
+Logarithmic returns are used as the core input for volatility modeling due to their statistical properties, including time additivity and suitability for capturing continuous price changes.
+In addition to closing price returns, the study also incorporates high, low, and volume data as part of the feature set to capture price movement and market activity. The high–low range reflects the extent of price fluctuations within each interval, while volume provides information on trading intensity and market participation.
+A one-year timeframe of five-minute interval data will be used to ensure a sufficient number of observations for reliable Hidden Markov Model estimation and volatility regime analysis.
+Data Preprocessing and Feature Engineering
+Although cryptocurrency exchange data is generally structured, minimal preprocessing is still required to ensure consistency and reliability. The dataset will be checked for missing values, duplicates, and irregular timestamps, and will be aligned chronologically. Any abnormal price values caused by exchange errors will be inspected and treated appropriately.
+After cleaning, feature engineering will be performed to transform raw market data into meaningful inputs for the model. The dataset consists of OHLCV variables, namely open, high, low, close, and volume, which represent both price movement and trading activity within each interval.
+From this dataset, several features will be derived to better capture volatility behavior. The primary feature is the logarithmic return, computed from consecutive closing prices, which measures the intensity of price changes and serves as the core input for volatility modeling. In addition, rolling volatility will be calculated using the standard deviation of log returns over a window of 10 to 20 periods, allowing the model to capture changes in market variability over time.
+To further represent intraperiod price movement, the high–low range will be included to capture the extent of price fluctuations within each interval. Lastly, trading volume will be incorporated as a measure of market activity, helping distinguish between strong and weak price movements depending on the level of participation in the market.
+These engineered features collectively form the input to the Hidden Markov Model, enabling a more comprehensive representation of market behavior for volatility regime classification.
+
+Quarterly Segmentation 
+After data preprocessing and feature engineering, the historical cryptocurrency dataset will be divided into four quarterly periods to examine changes in volatility behavior throughout the one-year observation period. The quarterly segmentation will be applied separately to each cryptocurrency and time interval configuration (5-minute, 15-minute, and 30-minute datasets).
+The dataset covering January 2025 to December 2025 will be segmented into the following quarterly periods:
+Quarter
+Period
+Q1
+January - March 2025
+Q2
+April - June 2025
+Q3
+July - September 2025
+Q4
+October - December 2025
+
+Table1. Quarterly Data Segmentation (2025) 
+This segmentation approach enables the study to examine whether the effectiveness of the selected feature sets varies across different market periods within the year. Since cryptocurrency markets are highly dynamic and influenced by changing trading conditions, dividing the dataset into quarterly periods allows the study to analyze model performance under different market conditions and temporal variations in volatility behavior.
+The quarterly segmentation also supports comparative analysis across cryptocurrencies, time intervals, and feature configurations. By training the Hidden Markov Model separately for each quarterly dataset, the study can compare the performance of the baseline feature set consisting of logarithmic returns and high-low price range against the extended feature set that additionally includes trading volume and rolling volatility using evaluation metrics such as log-likelihood, Akaike Information Criterion (AIC), and Bayesian Information Criterion (BIC).
+Multi-Timeframe Analysis
+To evaluate how volatility behavior changes across different time resolutions, the study applies multi-timeframe analysis using 5-minute, 15-minute, and 30-minute intervals. The Hidden Markov Model is applied separately to each timeframe to identify volatility regimes.
+The resulting regime classifications are then compared to determine whether volatility patterns remain consistent or vary depending on the time interval. This allows the study to assess the stability and reliability of the model across different market granularities.
+Hidden Markov Model Training
+The Hidden Markov Model (HMM) serves as the core machine learning component of the study. It assumes that observed market data (log returns and related features) are generated from a finite number of hidden states, each representing a distinct volatility regime. These states evolve over time following a Markov process, where the current state depends only on the previous state.
+To determine the optimal number of volatility regimes, multiple models with different numbers of states will be evaluated using Akaike Information Criterion (AIC) and Bayesian Information Criterion (BIC). Based on financial theory and prior literature, the expected optimal solution is three states: low, medium, and high volatility.
+Model parameters, including transition probabilities, initial state probabilities, and state-dependent distributions, will be estimated using the Baum–Welch algorithm, which is an Expectation–Maximization (EM) method. The EM procedure iteratively refines the model through two steps: the Expectation step, where the probabilities of hidden states are estimated based on the current parameters, and the Maximization step, where the parameters are updated to better fit the observed data.
+This iterative process continues until convergence, allowing the model to stabilize its learned volatility structure. After training, the Viterbi algorithm will be used to determine the most probable sequence of hidden states, assigning each time point to a specific volatility regime.
+This allows the model to perform continuous volatility regime classification suitable for real-time market analysis.
+Model Evaluation and Validation
+The performance of the Hidden Markov Model will be evaluated using log-likelihood, Akaike Information Criterion (AIC), and Bayesian Information Criterion (BIC). Log-likelihood will measure how well the model fits the observed cryptocurrency data, while AIC and BIC will be used to assess model quality by balancing goodness of fit and model complexity, with lower values indicating better performance.
+The evaluation focuses on comparative analysis across multiple dimensions of the study, specifically across cryptocurrencies, quarterly periods, time intervals, and feature configurations. This includes comparing results among Bitcoin, Ethereum, Dogecoin, and Litecoin, as well as across the 5-minute, 15-minute, and 30-minute intervals, and the two feature sets used in the model.
+In addition, comparative analysis will be conducted across quarterly segments (Q1 to Q4) to determine whether model performance and volatility representation vary across different market periods. This multi-dimensional evaluation framework allows the study to assess whether the inclusion of trading volume and rolling volatility improves the model’s ability to capture cryptocurrency volatility behavior under different market conditions.
+
+
+
+
+
+REFERENCES
+Kang, T. H., & Hwang, B. S. (2023). Hidden Markov model with stochastic volatility for estimating Bitcoin price volatility. Korean J Appl Stat, 36(1), 85-100.  https://doi.org/10.5351/KJAS.2023.36.1.085
+Pennoni, F., Bartolucci, F., Forte, G., & Ametrano, F. M. (2022). Exporting the dependencies among main cryptocurrency log-returns: A hidden Markov model. Economic Notes, 51(1), e12193. https://doi.org/10.1111/ecno.12193
+
+Balcilar , M., Bouri, E., Gupta, R., & Rouband, D. (2017). Can volume predict bitcoin returns and volatility? A quantiles based approach. Economic  Modelling, 64, 74-81. https://ideas.repec.org/r/eee/ecmode/v64y2017icp74-81.html 
+Corbet, S., Lucey, B., & Yarovaya, L. (2019). Cryptocurrencies as a financial asset: A systematic analysis. International Review of Financial Analysis, 62, 182–199. https://doi.org/10.1016/j.irfa.2018.09.003 
+Liu, J., & Serletis, A. (2019). Volatility in Cryptocurrency markets. Open Economies Review, 30(4), 779–811. https://doi.org/10.1007/s11079-019-09547-5
+Yasay, J. J. (2021). The dawn of digital coins. A literature Review on Cryptocurrency in the Philippines. International Journal of Innovative Science and Research Technology, 6(5). https://www.researchgate.net/publication/352372161_The_Dawn_of_Digital_Coins_A_Literature_Review_on_Cryptocurrency_in_the_Philippines
+Catalini, C., & Gans, J. S, (2016). Some simple economics of the blockchain. Research in International Business and Finance, 48, 124-139. https://doi.org/10.2139/ssrn.287459
+Katsiampa, P. (2017). Volatility estimation for Bitcoin: A comparison of GARCH models. Economics Letters, 158, 3-6. https://doi.org/10.1016/j.econlet.2017.06.023
+Catania, L., & Grassi, S. (2017). Modelling crypto-currencies financial time series. Econometric Reviews, 36(10), 1292-1315. https://doi.org/10.1080/07474938.2016.114399
+Jacobs, G. (2018). Cryptocurrencies and the challenge of global governance. Cadmus Journal, 3(4). https://www.cadmusjournal.org/files/pdfreprints/vol3issue4/Cryptocurrencies-and-the-Challenge-of-Global-Governance-GJacobs-Cadmus-V3-I4-Reprint.pdf
+Corbet, S., Meegan, A., Larkin, C., Lucey, B., & Yarovaya, L. (2018). Exploring the dynamic relationships between cryptocurrencies and other financial assets. Economics Letters, 165, 28-34. https://doi.org/10.1016/j.econlet.2018.01.004
+Alexander, C., & Dakos, M. (2020). A critical investigation of cryptocurrency data and analysis. Quantitative Finance, 20(2), 173–188. https://doi.org/10.1080/14697688.2019.1641347
+Bouri, E., & Gupta, R. (2019). Commodity volatility and Bitcoin: Interdependence and spillovers. Energy Economics, 81, 108–116. https://doi.org/10.1016/j.eneco.2019.04.014
+ Lahmiri, S., & Bekiros, S. (2019). Chaos, randomness and multi-fractality in Bitcoin markets. Chaos, Solitons & Fractals, 106, 28-34. https://doi.org/10.1016/j.chaos.2017.11.005
+Bangko Sentral ng Pilipinas (2017). Virtual asset and initial coin offering (ICO) framework (BSP Circular No. 944). https://www.bsp.gov.ph/Regulations/Issuances/2017/c944.pdf
+Chu, J., Nadarajah, S., & Chan, S. (2017). A Statistical Analysis of Cryptocurrencies. Journal of Risk and Financial Management, 10(2), 12. https://doi.org/10.3390/jrfm10020012
+Ardia, D., Bluteau, K., Rüede, M. (2019). Regime changes in Bitcoin GARCH volatility dynamics. Finance Research Letters, 29, 266-271. https://doi.org/10.1016/j.frl.2018.08.009
+Sadorsky, P. (2021). A random forests approach to predicting clean energy stock prices. Journal of Risk and Financial Management, 14(2), 48. https://doi.org/10.3390/jrfm14020048
+Securities and Exchange Commission Philippines. (2023). Advisories on cryptocurrency investments and digital asset risks. https://www.sec.gov.ph
+Doblas, M. P., Becaro, J. M. G., Sankar, J. P., Natarajan, V. K., Yoganandham, G., & Arumugasamy, G. (2024). Testing integrative models of the change behavior in the intention to adopt cryptocurrency. SAGE Open, 14(2). https://doi.org/10.1177/21582440241253542
+
+
+
+
+ 
+
+
+
+
+
+ 
+
+
+
+
