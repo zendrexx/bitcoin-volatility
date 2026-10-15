@@ -8,7 +8,7 @@ KLINE_COLUMNS = [
     "high",
     "low",
     "close",
-    "volume",     # total BTC traded during interval
+    "volume",     # base-asset amount traded during the candle (BTC, ETH, DOGE, or LTC)
     "close_time",
     "qav",        # Quote Asset Volume (total value in USDT)
     "trades",     # number of trades

@@ -31,7 +31,7 @@ def add_volume_surprise(df: pd.DataFrame) -> pd.DataFrame:
 def run(tf: str = "15m", coins=COINS):
     for coin in coins:
         print(f"\nVolume surprise by regime — regimes fitted WITHOUT volume (Model C, {coin.upper()} {tf})")
-        print(f"{'Q':<4}{'Low (Bull)':>12}{'Medium':>12}{'High (Bear)':>13}{'monotone':>10}")
+        print(f"{'Q':<4}{'Low vol':>12}{'Medium vol':>12}{'High vol':>13}{'monotone':>10}")
 
         for q in QUARTERS:
             path = find_file(tf, q, coin=coin)
@@ -47,9 +47,9 @@ def run(tf: str = "15m", coins=COINS):
             df = add_volume_surprise(df)
 
             means = df.groupby("regime")["volume_z"].mean()
-            low  = means.get("Low (Bull)", np.nan)
-            mid  = means.get("Medium (Sideways)", np.nan)
-            high = means.get("High (Bear)", np.nan)
+            low  = means.get("Low volatility", np.nan)
+            mid  = means.get("Medium volatility", np.nan)
+            high = means.get("High volatility", np.nan)
             mono = "yes" if low < mid < high else "no"
             print(f"{q:<4}{low:>12.3f}{mid:>12.3f}{high:>13.3f}{mono:>10}")
 

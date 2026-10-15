@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Crypto volatility regime detection using Gaussian Hidden Markov Models. Binance OHLCV klines (BTC/ETH/DOGE at 5m/15m/30m, split by quarter of 2025) are turned into feature sets, fit with `hmmlearn.GaussianHMM`, and compared across four feature-set variants (Models A–D) using log-likelihood / AIC / BIC. Hidden states are mapped to regime labels (Bull / Sideways / Bear) by sorting states on mean rolling volatility.
+Crypto volatility regime detection using Gaussian Hidden Markov Models. Binance OHLCV klines (BTC/ETH/DOGE/LTC at 5m/15m/30m, split by quarter of 2025) are turned into feature sets, fit with `hmmlearn.GaussianHMM`, and compared across four feature-set variants (Models A–D) using log-likelihood / AIC / BIC. Hidden states are mapped to Low, Medium, and High volatility by sorting states on mean rolling volatility. All four models use absolute log return and high-low range. B adds volume, C adds rolling volatility, and D adds both. Rolling volatility is computed from signed log returns.
+
+The research findings below used earlier models with signed log return as an HMM input. Recalculate model comparisons before applying those figures to the current absolute-return models.
 
 **The thesis focus is the volume feature.** Volume enters Models B/D as **raw volume** in both implementations — deliberately. Deseasonalized/log/z-scored variants were tested and score *worse* on likelihood metrics — do not "clean up" the volume feature expecting AIC to improve.
 
@@ -16,7 +18,7 @@ All active code lives in `src/HMM/` (Python). The Next.js/TypeScript app tracked
 
 ## Commands
 
-Everything must be run **from `src/HMM/`** — `data_fetcher.py` and `main.py` resolve `data/raw` relative to the CWD, while `server.py` resolves it relative to its own file. Running from the repo root makes the batch pipeline read the stale copy at the top-level `data/raw/` instead.
+`main.py`, `train_2025.py`, `update_model_guide.py`, and `server.py` resolve data relative to their source files and can run from the repository root or `src/HMM/`. The fetcher still resolves its output relative to the CWD, so run `data_fetcher.py` from `src/HMM/`.
 
 ```bash
 cd src/HMM
@@ -25,7 +27,9 @@ pip install flask flask-cors hmmlearn scikit-learn pandas numpy requests
 python data_fetcher.py            # fetch BTC klines from Binance
 python data_fetcher.py eth doge   # any of: btc, eth, doge
 
-python main.py                    # batch run: all timeframes × quarters × Models A–D
+python main.py                    # batch run: all four coins × timeframes × quarters × Models A–D
+python train_2025.py --force      # refresh all 48 annual saved models
+python update_model_guide.py      # update complete tables using saved models and quarterly results
 python server.py                  # Flask dashboard on http://localhost:5050
 ```
 
@@ -44,7 +48,7 @@ The two **must** stay in sync on three settings, all aligned as of 17 Aug 2026:
 - **`EXCLUDED_WINDOWS`** — the 2025-10-10 20:00–04:00 UTC liquidation cascade, dropped in `feature_engineering.EXCLUDED_WINDOWS` and `server.EXCLUDED_WINDOWS`. That bar hit −43.2% on DOGE / −37.0% on LTC (~119σ standard-scaled) and collapsed a hidden state onto a handful of bars. Excluding it is also what makes `"full"` numerically safe: with the window in, 6 fits raised exceptions and 4 more returned degenerate models; with it out, all 384 fits run clean under both covariance settings.
 - Feature definitions, metrics, and regime labeling.
 
-Full results, including the per-quarter and per-coin tables behind the claims above, are in `findings.txt` at the repo root.
+Historical results, including the per-quarter and per-coin tables behind the claims above, are in `findings.txt` at the repo root. Its model-comparison figures predate the change to absolute log return in all four models; recalculate those comparisons before using them as current results.
 
 Other things that require reading multiple files to notice:
 

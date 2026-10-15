@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# fitted 2025 HMM bundles (generated locally)
+/src/HMM/data/models/

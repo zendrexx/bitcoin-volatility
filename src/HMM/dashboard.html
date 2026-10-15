@@ -63,8 +63,6 @@ select{font-size:12px;border:1px solid #d0d0c8;border-radius:6px;padding:5px 10p
 /* chart sizes */
 .ch{position:relative;width:100%;height:250px}
 .ch-comparison{position:relative;width:100%;height:205px}
-.ch-sm{position:relative;width:100%;height:175px}
-.avg-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 .regime-swatch{width:10px;height:10px;border-radius:2px;flex-shrink:0}
 .model-feature{font-size:10px;font-weight:400;color:#888;margin-left:6px}
 .timeline-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0 4px}
@@ -74,6 +72,15 @@ select{font-size:12px;border:1px solid #d0d0c8;border-radius:6px;padding:5px 10p
 .timeline-slider{width:100%;accent-color:#378ADD;cursor:pointer;margin:2px 0 8px}
 .ch-comparison canvas{cursor:grab;touch-action:pan-y}
 .ch-comparison canvas.dragging{cursor:grabbing}
+.forecast{display:none;background:#fafaf8;border:1px solid #e7e7df;border-radius:7px;padding:8px 10px;margin:4px 0 10px}
+.forecast-current{font-size:11px;color:#444;margin-bottom:6px}
+.forecast-states{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.forecast-state{font-size:10px;border-left:3px solid;padding:3px 7px;min-width:0}
+.forecast-state strong{display:block;font-size:12px;color:#333}
+.forecast-state span{display:block;margin-top:3px;color:#666}
+.forecast-caveat{font-size:10px;color:#805b16;margin-top:6px}
+.agreement{display:none;font-size:11px;color:#555;background:#f7f7f4;border:1px solid #e5e5dc;border-radius:6px;padding:6px 9px;margin:0 0 10px}
+@media(max-width:600px){.forecast-states{grid-template-columns:1fr}}
 
 </style>
 </head>
@@ -81,7 +88,7 @@ select{font-size:12px;border:1px solid #d0d0c8;border-radius:6px;padding:5px 10p
 <div class="wrap">
 
   <h1>HMM Crypto Regime Detection Dashboard</h1>
-  <p class="sub">Comparing feature sets A–D across quarters using Hidden Markov Models</p>
+  <p class="sub">Live prices and volatility regimes from models trained on 2025 candles</p>
 
   <!-- Coin selector -->
   <div class="coin-tabs" id="coin-tabs">
@@ -92,8 +99,15 @@ select{font-size:12px;border:1px solid #d0d0c8;border-radius:6px;padding:5px 10p
   <!-- Controls -->
   <div class="controls">
     <div class="cg">
+      <span class="cl">Data</span>
+      <select id="mode-sel" onchange="selectDataMode()">
+        <option value="live" selected>Live market</option>
+        <option value="history">2025 analysis</option>
+      </select>
+    </div>
+    <div class="cg">
       <span class="cl">Timeframe</span>
-      <select id="tf-sel">
+      <select id="tf-sel" onchange="runAnalysis()">
         <option value="5m">5m</option>
         <option value="15m" selected>15m</option>
         <option value="30m">30m</option>
@@ -101,7 +115,7 @@ select{font-size:12px;border:1px solid #d0d0c8;border-radius:6px;padding:5px 10p
     </div>
     <div class="cg" style="margin-left:auto">
       <span class="cl">&nbsp;</span>
-      <button class="run-btn" id="run-btn" onclick="runAnalysis()">▶ Run Analysis</button>
+      <button class="run-btn" id="run-btn" onclick="runAnalysis()">▶ Start Live</button>
     </div>
   </div>
 
@@ -115,8 +129,6 @@ select{font-size:12px;border:1px solid #d0d0c8;border-radius:6px;padding:5px 10p
   <div id="tab-bar" class="tabs" style="display:none">
     <button class="tab active" id="tab-regimes" onclick="showTab('regimes',this)">Regime Comparison</button>
     <button class="tab" id="tab-ll" onclick="showTab('ll',this)">Log-Likelihood</button>
-    <button class="tab" id="tab-avg" onclick="showTab('avg',this)">Average Log-Likelihood</button>
-    <button class="tab" onclick="showTab('char',this)">Characteristics</button>
   </div>
 
   <!-- Regime comparison -->
@@ -124,7 +136,8 @@ select{font-size:12px;border:1px solid #d0d0c8;border-radius:6px;padding:5px 10p
     <div class="card">
       <div class="card-title" id="comparison-title">2025 Price and Volatility Regimes</div>
       <div class="legend" id="regime-state-leg"></div>
-      <p class="hint" style="margin:0 0 10px">Every model uses the same closing-price data, UTC dates, and price scale. Green, amber, and red show its inferred volatility regime; gray shows dates without a valid fit. Dashed markers are quarter boundaries and each quarter has a separate HMM fit.</p>
+      <p class="hint" id="comparison-hint" style="margin:0 0 10px">Every model uses the same closing-price data, UTC dates, and price scale. Green, amber, and red show its inferred volatility regime; gray shows dates without a valid fit.</p>
+      <p class="agreement" id="comparison-agreement"></p>
       <div class="timeline-tools">
         <label for="view-window">Visible window</label>
         <select id="view-window" onchange="changeComparisonWindow(this.value)">
@@ -139,15 +152,19 @@ select{font-size:12px;border:1px solid #d0d0c8;border-radius:6px;padding:5px 10p
         </select>
         <span class="timeline-range" id="timeline-range"></span>
       </div>
-      <input class="timeline-slider" id="timeline-slider" type="range" aria-label="Move all model charts through 2025" oninput="slideComparison(this.value)">
-      <p class="hint" style="margin:0 0 10px">Drag any price chart to move all four together. Use the slider to travel through the year; hold Ctrl and scroll over a chart to zoom.</p>
+      <input class="timeline-slider" id="timeline-slider" type="range" aria-label="Move all model charts through time" oninput="slideComparison(this.value)">
+      <p class="hint" style="margin:0 0 10px">Drag any price chart to move all four together. Use the slider to travel through time; hold Ctrl and scroll over a chart to zoom.</p>
       <div class="card-title">Model A <span class="model-feature" id="feature-a"></span></div>
+      <div class="forecast" id="forecast-a"></div>
       <div class="ch-comparison"><canvas id="comparison-a"></canvas></div>
       <div class="card-title">Model B <span class="model-feature" id="feature-b"></span></div>
+      <div class="forecast" id="forecast-b"></div>
       <div class="ch-comparison"><canvas id="comparison-b"></canvas></div>
       <div class="card-title">Model C <span class="model-feature" id="feature-c"></span></div>
+      <div class="forecast" id="forecast-c"></div>
       <div class="ch-comparison"><canvas id="comparison-c"></canvas></div>
       <div class="card-title">Model D <span class="model-feature" id="feature-d"></span></div>
+      <div class="forecast" id="forecast-d"></div>
       <div class="ch-comparison"><canvas id="comparison-d"></canvas></div>
     </div>
   </div>
@@ -162,54 +179,33 @@ select{font-size:12px;border:1px solid #d0d0c8;border-radius:6px;padding:5px 10p
     </div>
   </div>
 
-  <!-- Average Log-Likelihood -->
-  <div id="panel-avg" class="panel">
-    <div class="card">
-      <div class="card-title">Average Log-Likelihood Across Available Quarters</div>
-      <div class="ch-sm"><canvas id="avg-ll"></canvas></div>
-    </div>
-  </div>
-  <!-- Characteristics -->
-  <div id="panel-char" class="panel">
-    <div class="card">
-      <div class="card-title">Raw Volatility Characteristics by Quarter — no HMM, no regime</div>
-      <div class="avg-grid" style="grid-template-columns:repeat(2,1fr)">
-        <div>
-          <p style="font-size:10px;color:#888;margin-bottom:4px">Rolling Volatility (mean, by quarter)</p>
-          <div class="ch-sm"><canvas id="char-rv"></canvas></div>
-        </div>
-        <div>
-          <p style="font-size:10px;color:#888;margin-bottom:4px">High-Low Range (mean, by quarter)</p>
-          <div class="ch-sm"><canvas id="char-hl"></canvas></div>
-        </div>
-      </div>
-      <p class="hint">Computed directly from log returns, high-low range, volume and rolling volatility — independent of any HMM fit or model comparison. Answers RQ1 (characteristics per coin) and RQ3 (differences across quarters).</p>
-      <div style="overflow-x:auto;margin-top:10px"><table id="char-table" style="width:100%;border-collapse:collapse;font-size:11px;white-space:nowrap"></table></div>
-    </div>
-  </div>
-
 </div>
 
 <script>
 const API = 'http://localhost:5050';
 const N_STATES = 3;
+const VOL_WINDOW = 10;
 
 const M_COLORS = ['#378ADD','#1D9E75','#D85A30','#7F77DD'];
 const M_DASHES = [[], [6,3], [3,3], [8,3,2,3]];
 const M_NAMES  = ['Model A','Model B','Model C','Model D'];
 const M_FEAT   = [
-  'Log Return + High-Low Range',
-  'Log Return + High-Low Range + Volume',
-  'Log Return + High-Low Range + Rolling Volatility',
-  'Log Return + High-Low Range + Volume + Rolling Volatility',
+  'Absolute Log Return + High-Low Range',
+  'Absolute Log Return + High-Low Range + Volume',
+  'Absolute Log Return + High-Low Range + Rolling Volatility',
+  'Absolute Log Return + High-Low Range + Volume + Rolling Volatility',
 ];
 const QUARTERS = ['Q1','Q2','Q3','Q4'];
 const REGIME_NAMES = ['Low volatility','Medium volatility','High volatility'];
 const REGIME_COLORS = ['#1D9E75','#E3A018','#D85A30'];
 let charts   = {};
 let lastData = null;
-let lastChar = null;
 let activeCoin = 'btc';
+let liveSocket = null;
+let liveReconnect = null;
+let liveBars = [];
+let liveGeneration = 0;
+let inferenceSerial = 0;
 const DAY_MS = 24 * 60 * 60 * 1000;
 let comparisonView = {key:null, frame:null};
 
@@ -236,6 +232,31 @@ function makeRegimeLegends(){
   document.getElementById('regime-state-leg').innerHTML = REGIME_NAMES.map((name,i)=>
     `<span class="li"><span class="regime-swatch" style="background:${REGIME_COLORS[i]}"></span>${name}</span>`
   ).join('') + '<span class="li"><span class="regime-swatch" style="background:#b5b5b5"></span>No valid fit</span>';
+}
+
+function updateForecastCards(forecasts, timeframe){
+  for(let m=0;m<4;m++){
+    const id=String.fromCharCode(65+m);
+    const card=document.getElementById('forecast-'+id.toLowerCase());
+    const forecast=forecasts?.[id];
+    if(!forecast){card.textContent='Next-state probabilities unavailable for this model.';continue;}
+    const current=forecast.current_state;
+    const confidence=(100*forecast.current_probability).toFixed(1);
+    const states=REGIME_NAMES.map((name,tier)=>{
+      const probability=(100*forecast.next_state_probabilities[tier]).toFixed(1);
+      const mean=(100*forecast.tier_mean_rolling_vol[tier]).toFixed(4);
+      return `<div class="forecast-state" style="border-color:${REGIME_COLORS[tier]}">`+
+        `<strong>${name}: ${probability}%</strong>`+
+        `<span>2025 avg volatility: ${mean}%</span></div>`;
+    }).join('');
+    const [low,medium]=forecast.tier_mean_rolling_vol;
+    const closeLowMedium=low>0 && (medium-low)/low<0.05;
+    card.innerHTML=`<div class="forecast-current">Current model state: `+
+      `<strong style="color:${REGIME_COLORS[current]}">${REGIME_NAMES[current]}</strong> `+
+      `(${confidence}% state probability) · Next ${timeframe} state:</div>`+
+      `<div class="forecast-states">${states}</div>`+
+      (closeLowMedium ? '<div class="forecast-caveat">Low and Medium have similar 2025 averages for this model.</div>' : '');
+  }
 }
 
 // ── Coin tabs ───────────────────────────────────────────────────────────────
@@ -273,6 +294,7 @@ function selectCoin(coin, hasData, button){
     setStatus(`No ${coin.toUpperCase()} files found in data/raw/. Run: python data_fetcher.py ${coin}`, 'err');
     return;
   }
+  stopLive();
   activeCoin = coin;
   // Update tab highlights
   document.querySelectorAll('.coin-tab').forEach(b => b.classList.remove('active'));
@@ -283,7 +305,13 @@ function selectCoin(coin, hasData, button){
   document.getElementById('tab-bar').style.display = 'none';
   document.getElementById('status').className = 'status';
   lastData = null;
-  lastChar = null;
+  if(document.getElementById('mode-sel').value==='live') runAnalysis();
+}
+
+function selectDataMode(){
+  stopLive();
+  lastData=null;
+  runAnalysis();
 }
 
 // ── File map ─────────────────────────────────────────────────────────────────
@@ -310,6 +338,13 @@ async function loadFileMap(){
 
 // ── Run analysis ──────────────────────────────────────────────────────────────
 async function runAnalysis(){
+  if(document.getElementById('mode-sel').value==='live'){
+    await runLive();
+    return;
+  }
+  stopLive();
+  const generation=liveGeneration;
+  const coin=activeCoin;
   const tf      = document.getElementById('tf-sel').value;
   const nStates = N_STATES;
   const btn     = document.getElementById('run-btn');
@@ -325,9 +360,10 @@ async function runAnalysis(){
   document.getElementById('tab-bar').style.display = 'none';
 
   try {
-    const r = await fetch(`${API}/api/run?coin=${activeCoin}&tf=${tf}&states=${nStates}`);
+    const r = await fetch(`${API}/api/run?coin=${coin}&tf=${tf}&states=${nStates}`);
     if(!r.ok) throw new Error(`Server returned ${r.status}`);
     const d = await r.json();
+    if(generation!==liveGeneration) return;
 
     const ok = (d.results || []).filter(x => !x.error);
     if(!Object.keys(d.regime_series || {}).length){
@@ -349,22 +385,163 @@ async function runAnalysis(){
     document.getElementById('tab-bar').style.display = 'flex';
     renderAll(d);
 
-    try {
-      const cr = await fetch(`${API}/api/characteristics?coin=${activeCoin}&tf=${tf}`);
-      lastChar = await cr.json();
-      renderCharacteristics(lastChar);
-    } catch(_) { lastChar = null; }
-
   } catch(e) {
-    setStatus('Could not run or draw analysis: ' + e.message, 'err');
-    console.error(e);
+    if(generation===liveGeneration){
+      setStatus('Could not run or draw analysis: ' + e.message, 'err');
+      console.error(e);
+    }
   } finally {
-    btn.disabled    = false;
-    btn.textContent = '▶ Run Analysis';
+    if(generation===liveGeneration){
+      btn.disabled    = false;
+      btn.textContent = '▶ Run Analysis';
+    }
   }
 }
 
 // ── Data helpers ──────────────────────────────────────────────────────────────
+function stopLive(){
+  liveGeneration++;
+  inferenceSerial++;
+  if(liveReconnect){clearTimeout(liveReconnect);liveReconnect=null;}
+  if(liveSocket){
+    liveSocket.onclose=null;
+    liveSocket.close();
+    liveSocket=null;
+  }
+  liveBars=[];
+}
+
+async function runLive(){
+  stopLive();
+  const generation=liveGeneration;
+  const tf=document.getElementById('tf-sel').value;
+  const coin=activeCoin;
+  const btn=document.getElementById('run-btn');
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  document.getElementById('panel-regimes').classList.add('active');
+  document.getElementById('tab-regimes').classList.add('active');
+  document.getElementById('tab-bar').style.display='none';
+  btn.disabled=true;
+  btn.textContent='Loading live data…';
+  setStatus('Loading saved 2025 models, or training them once, then fetching live Binance candles…','info');
+  try{
+    const response=await fetch(API+'/api/live?coin='+coin+'&tf='+tf);
+    const data=await response.json();
+    if(generation!==liveGeneration) return;
+    if(!response.ok) throw new Error(data.error || 'Server returned '+response.status);
+    liveBars=data.bars;
+    lastData={...data,live:true};
+    buildComparisonCharts(data.regime_series,data.coin,data.tf,'live');
+    updateForecastCards(data.regime_series.Q1.forecast,tf);
+    setStatus(
+      data.coin+' · '+tf+' · Binance Spot · connecting to live stream · trained on 2025'+
+      (data.missing_models.length ? ' · unavailable models: '+data.missing_models.join(', ') : '')+
+      (data.provisional ? ' · current candle is provisional' : ''),
+      'info'
+    );
+    startLiveSocket(coin,tf,generation);
+  }catch(error){
+    if(generation===liveGeneration){
+      setStatus('Live data unavailable: '+error.message,'err');
+      console.error(error);
+    }
+  }finally{
+    if(generation===liveGeneration){
+      btn.disabled=false;
+      btn.textContent='↻ Refresh Live';
+    }
+  }
+}
+
+function startLiveSocket(coin,tf,generation){
+  const stream=coin+'usdt@kline_'+tf;
+  const socket=new WebSocket('wss://data-stream.binance.vision:443/ws/'+stream);
+  liveSocket=socket;
+  socket.onopen=()=>{
+    if(generation===liveGeneration)
+      setStatus(coin.toUpperCase()+' · '+tf+' · Binance Spot live stream connected · models trained on 2025','ok');
+  };
+  socket.onmessage=event=>{
+    if(generation!==liveGeneration) return;
+    try{
+      const message=JSON.parse(event.data);
+      if(message.e!=='kline' || !message.k) return;
+      const k=message.k;
+      const row=[k.t,k.o,k.h,k.l,k.c,k.v,k.T,k.q,k.n,k.V,k.Q,k.B];
+      receiveLiveCandle(row,Boolean(k.x),coin,tf,generation);
+    }catch(error){console.error('Live candle error',error);}
+  };
+  socket.onclose=()=>{
+    if(generation!==liveGeneration) return;
+    liveSocket=null;
+    setStatus('Live stream disconnected. Reconnecting and filling missed candles…','info');
+    liveReconnect=setTimeout(()=>runLive(),5000);
+  };
+  socket.onerror=()=>socket.close();
+}
+
+async function receiveLiveCandle(row,closed,coin,tf,generation){
+  const time=Number(row[0]), close=Number(row[4]);
+  const lastBar=liveBars[liveBars.length-1];
+  if(lastBar && time<Number(lastBar[0])) return;
+  if(lastBar && time===Number(lastBar[0])) liveBars[liveBars.length-1]=row;
+  else liveBars.push(row);
+  if(liveBars.length>300) liveBars.shift();
+
+  const view=comparisonView;
+  if(view.mode!=='live' || view.key!==coin.toUpperCase()+':'+tf+':live') return;
+  const last=view.times.length-1;
+  if(time<view.times[last]) return;
+  if(time===view.times[last]) view.prices[last]=close;
+  else {
+    view.times.push(time);
+    view.prices.push(close);
+    for(const modelStates of view.states) modelStates.push(null);
+    const oldest=time-30*DAY_MS-(VOL_WINDOW+2)*view.timeframeMs;
+    while(view.times.length>1 && view.times[0]<oldest){
+      view.times.shift();
+      view.prices.shift();
+      for(const modelStates of view.states) modelStates.shift();
+    }
+    view.domainStart=view.times[0];
+    view.domainEnd=time;
+  }
+  view.fullLow=Math.min(view.fullLow,close);
+  view.fullHigh=Math.max(view.fullHigh,close);
+  if(view.follow) view.start=Math.max(view.domainStart,view.domainEnd-view.span);
+  else view.start=Math.max(view.domainStart,Math.min(view.start,view.domainEnd-view.span));
+  syncComparisonControls();
+  if(view.frame===null) view.frame=requestAnimationFrame(updateComparisonCharts);
+
+  const serial=++inferenceSerial;
+  try{
+    const response=await fetch(API+'/api/live/infer',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({coin,tf,bars:liveBars,closed})
+    });
+    const result=await response.json();
+    if(generation!==liveGeneration || serial!==inferenceSerial) return;
+    if(!response.ok) throw new Error(result.error || 'Inference failed');
+    if(result.time!==view.times[view.times.length-1]) return;
+    for(let m=0;m<4;m++){
+      const id=String.fromCharCode(65+m);
+      view.states[m][view.states[m].length-1]=result.models[id];
+    }
+    updateForecastCards(result.forecast,tf);
+    if(view.frame===null) view.frame=requestAnimationFrame(updateComparisonCharts);
+    setStatus(
+      coin.toUpperCase()+' · '+tf+' · live Binance Spot · '+
+      (closed ? 'closed candle' : 'current candle is provisional')+
+      (result.missing_models.length ? ' · unavailable models: '+result.missing_models.join(', ') : ''),
+      result.missing_models.length ? 'err' : 'ok'
+    );
+  }catch(error){
+    if(generation===liveGeneration && serial===inferenceSerial)
+      setStatus('Live price is updating; regime inference failed: '+error.message,'err');
+  }
+}
+
 function extractSeries(results, metric){
   return M_NAMES.map(mn =>
     QUARTERS.map(q => {
@@ -372,13 +549,6 @@ function extractSeries(results, metric){
       return r ? r[metric] : null;
     })
   );
-}
-
-function avgSeries(series){
-  return series.map(arr => {
-    const vals = arr.filter(v => v !== null);
-    return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
-  });
 }
 
 // ── Chart builders ────────────────────────────────────────────────────────────
@@ -493,6 +663,41 @@ function comparisonPriceLimits(){
   return {min:low-padding,max:high+padding};
 }
 
+function updateComparisonAgreement(){
+  const {times,states,start,span}=comparisonView;
+  const el=document.getElementById('comparison-agreement');
+  if(comparisonView.mode==='live'){
+    el.style.display='none';
+    el.textContent='';
+    return;
+  }
+  el.style.display='block';
+  if(!times?.length || !states?.length){el.textContent='No comparable regimes in this window.';return;}
+  let left=0,right=times.length;
+  while(left<right){
+    const mid=(left+right)>>1;
+    if(times[mid]<start) left=mid+1; else right=mid;
+  }
+  const counts=[[0,0,0],[0,0,0]];
+  for(let i=left;i<times.length && times[i]<=start+span;i++){
+    const a=states[0][i];
+    if(!Number.isInteger(a)) continue;
+    for(const [pair,other] of [[0,1],[1,2]]){
+      const value=states[other][i];
+      if(!Number.isInteger(value)) continue;
+      counts[pair][0]++;
+      if(a===value) counts[pair][1]++;
+      if((a===2)===(value===2)) counts[pair][2]++;
+    }
+  }
+  const pct=(count,total)=>total ? (100*count/total).toFixed(1)+'%' : 'N/A';
+  el.textContent=`Visible-window regime agreement: A–B ${pct(counts[0][1],counts[0][0])} `+
+    `vs A–C ${pct(counts[1][1],counts[1][0])} · `+
+    `High/non-High agreement: A–B ${pct(counts[0][2],counts[0][0])}, `+
+    `A–C ${pct(counts[1][2],counts[1][0])}. `+
+    'The price line is identical on all four charts.';
+}
+
 function syncComparisonControls(){
   const view=comparisonView;
   const slider=document.getElementById('timeline-slider');
@@ -511,6 +716,7 @@ function syncComparisonControls(){
 
 function updateComparisonCharts(){
   comparisonView.frame=null;
+  updateComparisonAgreement();
   const limits=comparisonPriceLimits();
   const indices=comparisonSampleIndices();
   for(let m=0;m<4;m++){
@@ -531,6 +737,8 @@ function setComparisonView(start, span){
   view.span=Math.max(Math.min(DAY_MS,total),Math.min(span,total));
   const rounded=Math.round(Number(start)/view.timeframeMs)*view.timeframeMs;
   view.start=Math.max(view.domainStart,Math.min(rounded,view.domainEnd-view.span));
+  if(view.mode==='live')
+    view.follow=view.start+view.span>=view.domainEnd-2*view.timeframeMs;
   syncComparisonControls();
   if(view.frame===null) view.frame=requestAnimationFrame(updateComparisonCharts);
 }
@@ -540,7 +748,7 @@ function changeComparisonWindow(value){
   const view=comparisonView;
   const span=value==='all' ? view.domainEnd-view.domainStart : Number(value)*DAY_MS;
   const center=view.start+view.span/2;
-  setComparisonView(center-span/2,span);
+  setComparisonView(view.mode==='live' && view.follow ? view.domainEnd-span : center-span/2,span);
 }
 
 function slideComparison(value){
@@ -607,10 +815,20 @@ function comparisonAxisTicks(){
   return values;
 }
 
-function buildComparisonCharts(regimeSeries, coin, timeframe){
+function buildComparisonCharts(regimeSeries, coin, timeframe, mode='history'){
   makeRegimeLegends();
   document.getElementById('comparison-title').textContent =
-    '2025 ' + coin + ' / USDT Close Price and Volatility Regimes (' + timeframe + ')';
+    (mode==='live' ? 'Live ' : '2025 ') + coin +
+    ' / USDT Close Price and Volatility Regimes (' + timeframe + ')';
+  const hint=document.getElementById('comparison-hint');
+  hint.style.display=mode==='live'?'none':'block';
+  hint.textContent=mode==='live' ? '' : 'All four charts share the same closing-price data, UTC dates, and price scale. Colors show each quarterly model fit; dashed markers mark independent quarters.';
+  document.getElementById('comparison-agreement').style.display=mode==='live'?'none':'block';
+  for(let m=0;m<4;m++)
+    document.getElementById('forecast-'+String.fromCharCode(97+m)).style.display=
+      mode==='live'?'block':'none';
+  for(const option of document.getElementById('view-window').options)
+    option.disabled = mode==='live' && ['90','180','all'].includes(option.value);
   const {times, prices, states} = comparisonData(regimeSeries);
   if(!prices.length) return;
   const decimals = coin.toLowerCase() === 'doge' ? 4 : 2;
@@ -629,11 +847,12 @@ function buildComparisonCharts(regimeSeries, coin, timeframe){
   }
   const timeframeMs = parseInt(timeframe, 10) * 60 * 1000;
   const view=comparisonView;
-  const key=coin+':'+timeframe;
+  const key=coin+':'+timeframe+':'+mode;
   const fresh=view.key!==key;
   if(view.frame!==null) cancelAnimationFrame(view.frame);
   view.frame=null;
   view.key=key;
+  view.mode=mode;
   view.times=times;
   view.prices=prices;
   view.states=states;
@@ -644,10 +863,12 @@ function buildComparisonCharts(regimeSeries, coin, timeframe){
   view.timeframeMs=timeframeMs;
   const total=view.domainEnd-view.domainStart;
   view.span=fresh ? Math.min(30*DAY_MS,total) : Math.min(view.span,total);
-  view.start=fresh ? Date.UTC(2025,0,1) : view.start;
+  view.start=fresh ? (mode==='live' ? view.domainEnd-view.span : Date.UTC(2025,0,1)) : view.start;
   view.start=Math.max(view.domainStart,Math.min(view.start,view.domainEnd-view.span));
+  if(fresh) view.follow=mode==='live';
   if(fresh) document.getElementById('view-window').value='30';
   syncComparisonControls();
+  updateComparisonAgreement();
   const limits=comparisonPriceLimits();
   const indices=comparisonSampleIndices();
   const dayFormatter=new Intl.DateTimeFormat('en-US', {month:'short',day:'numeric',timeZone:'UTC'});
@@ -678,7 +899,7 @@ function buildComparisonCharts(regimeSeries, coin, timeframe){
            return Number.isInteger(state) ? REGIME_COLORS[state] : '#b5b5b5';
          }}}
       ]},
-      plugins:[quarterMarkerPlugin(regimeSeries)],
+      plugins:mode==='live' ? [] : [quarterMarkerPlugin(regimeSeries)],
       options:{
         responsive:true, maintainAspectRatio:false, parsing:false,
         animation:false,
@@ -760,87 +981,6 @@ function buildLine(canvasId, series, qLabels){
   });
 }
 
-function buildBars(canvasId, values){
-  destroyChart(canvasId);
-  const ctx = document.getElementById(canvasId).getContext('2d');
-  charts[canvasId] = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: ['A','B','C','D'],
-      datasets: [{
-        data:            values.map(v => v!==null ? parseFloat(v.toFixed(2)) : null),
-        backgroundColor: M_COLORS,
-        borderWidth:     0,
-        borderRadius:    4,
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: c => c.raw!==null ? c.raw.toFixed(2) : 'N/A' } }
-      },
-      scales: {
-        x: { ticks:{font:{size:11}}, grid:{display:false} },
-        y: { ticks:{font:{size:10}}, grid:{color:'rgba(0,0,0,0.06)'} }
-      }
-    }
-  });
-}
-
-function buildQuarterBars(canvasId, values, qLabels, color){
-  destroyChart(canvasId);
-  const ctx = document.getElementById(canvasId).getContext('2d');
-  charts[canvasId] = new Chart(ctx, {
-    type: 'bar',
-    data: { labels: qLabels, datasets: [{ data: values, backgroundColor: color, borderWidth:0, borderRadius:4 }] },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: c => c.raw!==null ? c.raw.toFixed(6) : 'N/A' } }
-      },
-      scales: {
-        x: { ticks:{font:{size:11}}, grid:{display:false} },
-        y: { ticks:{font:{size:10}}, grid:{color:'rgba(0,0,0,0.06)'} }
-      }
-    }
-  });
-}
-
-function renderCharacteristics(d){
-  if(!d || !d.quarters) return;
-  const qs = QUARTERS.filter(q => d.quarters[q]);
-  if(!qs.length) return;
-
-  buildQuarterBars('char-rv', qs.map(q => d.quarters[q].rolling_vol.mean),    qs, '#378ADD');
-  buildQuarterBars('char-hl', qs.map(q => d.quarters[q].high_low_range.mean), qs, '#D85A30');
-
-  const feats = ['log_return','high_low_range','volume','rolling_vol'];
-  let rows = `<tr>
-    <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #e0e0d8">Quarter</th>
-    <th style="text-align:left;padding:4px 8px;border-bottom:1px solid #e0e0d8">Feature</th>
-    <th style="text-align:right;padding:4px 8px;border-bottom:1px solid #e0e0d8">Mean</th>
-    <th style="text-align:right;padding:4px 8px;border-bottom:1px solid #e0e0d8">Std</th>
-    <th style="text-align:right;padding:4px 8px;border-bottom:1px solid #e0e0d8">Skew</th>
-    <th style="text-align:right;padding:4px 8px;border-bottom:1px solid #e0e0d8">Kurt</th>
-  </tr>`;
-  qs.forEach(q => {
-    feats.forEach(f => {
-      const s = d.quarters[q][f];
-      rows += `<tr>
-        <td style="padding:3px 8px;color:#888">${q}</td>
-        <td style="padding:3px 8px">${f}</td>
-        <td style="padding:3px 8px;text-align:right">${s.mean}</td>
-        <td style="padding:3px 8px;text-align:right">${s.std}</td>
-        <td style="padding:3px 8px;text-align:right">${s.skew}</td>
-        <td style="padding:3px 8px;text-align:right">${s.kurt}</td>
-      </tr>`;
-    });
-  });
-  document.getElementById('char-table').innerHTML = rows;
-}
-
 // ── Render all ────────────────────────────────────────────────────────────────
 function renderAll(d){
   const results = (d.results || []).filter(x => !x.error);
@@ -861,9 +1001,6 @@ function renderAll(d){
     makeLegend('ll-leg');
     buildLine('ll-chart', llF, qLabels);
   }
-  if(document.getElementById('panel-avg').classList.contains('active')){
-    buildBars('avg-ll', avgSeries(llF));
-  }
 }
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
@@ -873,12 +1010,12 @@ function showTab(id, btn){
   document.getElementById('panel-'+id).classList.add('active');
   btn.classList.add('active');
   if(lastData) setTimeout(() => renderAll(lastData), 30);
-  if(lastChar) setTimeout(() => renderCharacteristics(lastChar), 30);
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 loadCoins();
 loadFileMap();
+runAnalysis();
 </script>
 </body>
 </html>

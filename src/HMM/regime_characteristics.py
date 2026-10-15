@@ -9,7 +9,7 @@ from hmm_model import train_hmm, predict_states, label_regimes, is_degenerate
 COINS      = ["btc", "eth", "doge", "ltc"]
 QUARTERS   = ["Q1", "Q2", "Q3", "Q4"]
 VOL_WINDOW = 10
-REGIMES    = ["Low (Bull)", "Medium (Sideways)", "High (Bear)"]
+REGIMES    = ["Low volatility", "Medium volatility", "High volatility"]
 
 
 def run_lengths(states: np.ndarray, state_map: dict) -> dict:

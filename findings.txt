@@ -2,6 +2,9 @@
 HMM VOLATILITY REGIME DETECTION - RESULTS
 Crypto volatility regimes, Gaussian HMM, 3 states, 2025 data
 Run 17 Aug 2026
+Historical report: Models A-D used signed log return in this run. Current code
+uses absolute log return for all four models. Comparison scores below need a new run
+before they can describe the current models.
 ==============================================================================
 
 Models:
@@ -12,7 +15,7 @@ Models:
 
 Data: Binance OHLCV, BTC/ETH/DOGE/LTC, 5m/15m/30m, Q1-Q4 2025
 
-SETTINGS IN THE CURRENT CODE:
+SETTINGS AT THE TIME OF THIS RUN:
   covariance_type  = 'full'   in hmm_model.train_hmm and server.run_hmm
   EXCLUDED_WINDOWS = []       NOTHING is excluded. The 2025-10-10
                               liquidation cascade IS in the sample.
@@ -39,7 +42,7 @@ CONTENTS
   Section 14  What to do
 
 ==============================================================================
-TABLE 1.  AIC - FULL COVARIANCE  (CURRENT SETTING)
+TABLE 1.  AIC - FULL COVARIANCE  (HISTORICAL SETTING)
 ==============================================================================
 % = how much better Model B (volume) is than Model A, on AIC.
 POSITIVE = volume model better.  NEGATIVE = volume model worse.
@@ -66,7 +69,7 @@ LTC   30m        -4.17     -13.81     -16.74     +28.13*
       the number is NOT a usable result. See Section 12.
 
 ==============================================================================
-TABLE 2.  AIC - DIAG COVARIANCE  (contrast only - not current)
+TABLE 2.  AIC - DIAG COVARIANCE  (historical contrast only)
 ==============================================================================
 % = how much better Model B (volume) is than Model A, on AIC.
 POSITIVE = volume model better.  NEGATIVE = volume model worse.
@@ -92,7 +95,7 @@ LTC   30m       -19.04     -17.85     -23.17     -35.78*
   * = at least one of Models A-D in that cell is degenerate or failed;
       the number is NOT a usable result. See Section 12.
 
-READING TABLE 1 (full covariance - the current setting):
+READING TABLE 1 (full covariance in this historical run):
   Q1 - volume model WINS 9 of 12 cells, ALL of them clean fits.
        Best: ETH 5m +12.76%, ETH 15m +12.11%, ETH 30m +9.18%.
        On BTC+ETH it is 6 of 6.
@@ -116,7 +119,7 @@ READING TABLE 2 (diag covariance):
 TABLE 3.  WIN COUNTS - Model B (volume) vs Model A
 ==============================================================================
 
-FULL covariance (current):
+FULL covariance (historical run):
                 --- CLEAN CELLS ---      ---- ALL CELLS ----
   QUARTER     B wins A wins   avg %     B wins A wins   avg %
   Q1               9      3   +3.54          9      3   +3.54
@@ -146,7 +149,7 @@ BTC + ETH ONLY, full covariance (every cell clean in all four quarters):
      broken cells turns Q4 from 2-of-6 into 7-of-12.
 
 ==============================================================================
-TABLE 4.  LOG-LIKELIHOOD - FULL COVARIANCE  (CURRENT)
+TABLE 4.  LOG-LIKELIHOOD - FULL COVARIANCE  (HISTORICAL)
 ==============================================================================
 LL(Model B) - LL(Model A), in nats. Higher LL = better fit, so
 POSITIVE = volume model better.  NEGATIVE = volume model worse.
@@ -214,7 +217,7 @@ Raw LL scales with sample size, so 5m cells look bigger than 30m cells for
 no real reason. Dividing by bar count makes cells comparable.
 Values = [LL(B) - LL(A)] / number of bars, in nats per bar.
 
-FULL COVARIANCE (current)
+FULL COVARIANCE (historical run)
 COIN  TF              Q1          Q2          Q3          Q4
 ------------------------------------------------------------
 BTC   5m        +0.0242     +0.0207     -0.2729     -0.0483 
@@ -288,7 +291,7 @@ Regimes fitted WITHOUT volume (Model C), then volume surprise measured
 inside each regime. Volume surprise = log volume minus its time-of-day
 baseline, z-scored. No likelihood involved anywhere in this table.
 
-  TF    Q      Low(Bull)      Medium  High(Bear)   RISES?
+  TF    Q            Low      Medium        High   RISES?
   -------------------------------------------------------
   5m    Q1        -0.142      -0.118       0.227      YES
   5m    Q2        -0.159      -0.095       0.351      YES
@@ -303,7 +306,7 @@ baseline, z-scored. No likelihood involved anywhere in this table.
   30m   Q3        -0.204      -0.164       0.349      YES
   30m   Q4        -0.446      -0.035       0.708      YES
 
-  -> High(Bear) volume surprise is strongly POSITIVE in 12 of 12 cells,
+  -> High-volatility volume surprise is strongly POSITIVE in 12 of 12 cells,
      and Low and Medium are both negative in 12 of 12. The link between
      volume and the volatility regime is unambiguous.
   -> The strict Low < Medium < High ordering holds in 10 of 12. It flips
@@ -320,15 +323,15 @@ TABLE 9.  REGIME CHARACTERISTICS - BTC, averaged over Q1-Q4
 
   TF    REGIME                % OF BARS  VOL (bp)  AVG LENGTH
   -----------------------------------------------------------
-  5m    Low (Bull)                 39.8       5.7      1h 51m
-  5m    Medium (Sideways)          43.1      11.3      1h 10m
-  5m    High (Bear)                17.2      23.8      1h 02m
-  15m   Low (Bull)                 37.9      10.0      4h 54m
-  15m   Medium (Sideways)          43.3      19.5      3h 04m
-  15m   High (Bear)                18.8      39.8      2h 42m
-  30m   Low (Bull)                 35.2      13.8      8h 11m
-  30m   Medium (Sideways)          43.0      26.9      5h 14m
-  30m   High (Bear)                21.8      53.5      4h 50m
+  5m    Low volatility            39.8       5.7      1h 51m
+  5m    Medium volatility         43.1      11.3      1h 10m
+  5m    High volatility           17.2      23.8      1h 02m
+  15m   Low volatility            37.9      10.0      4h 54m
+  15m   Medium volatility         43.3      19.5      3h 04m
+  15m   High volatility           18.8      39.8      2h 42m
+  30m   Low volatility            35.2      13.8      8h 11m
+  30m   Medium volatility         43.0      26.9      5h 14m
+  30m   High volatility           21.8      53.5      4h 50m
 
   (Indicative, from the diag-covariance run. BTC only, which is clean in
    every quarter. Re-derive from the current fits before quoting exactly.)
@@ -336,10 +339,9 @@ TABLE 9.  REGIME CHARACTERISTICS - BTC, averaged over Q1-Q4
   -> Volatility ratio between the three states is about 1 : 2 : 4 at every
      timeframe, which is what a real regime structure looks like rather
      than an artifact of one sampling choice.
-  -> Caveat: Bull/Bear naming comes from sorting on VOLATILITY, not
-     return. It holds in Q1 and Q4 (BTC Q4 high-vol state: -1.28 bp per
-     bar) but not Q3, where the high-vol state averages -0.02 bp, i.e.
-     flat. Consider naming states by volatility level instead.
+  -> Regime names come from sorting on volatility, not return direction.
+     The high-volatility state averaged -1.28 bp per bar in BTC Q4 but
+     -0.02 bp in Q3. Its name describes movement size, not price trend.
 
 ==============================================================================
 TABLE 10.  WITHIN-STATE CORRELATION between VOLUME and BAR RANGE
@@ -347,7 +349,7 @@ TABLE 10.  WITHIN-STATE CORRELATION between VOLUME and BAR RANGE
 BTC 15m, full covariance. This is WHY volume helps in some quarters and
 why diag covariance destroys the effect.
 
-  Q         Bull   Sideways     Bear   B WINS?
+  Q          Low     Medium     High   B WINS?
   --------------------------------------------
   Q1       0.581      0.496    0.757       YES
   Q4       0.608      0.416    0.745        no
@@ -357,7 +359,7 @@ why diag covariance destroys the effect.
   -> Volume and bar range are strongly correlated INSIDE each state
      (0.25-0.76). A diagonal covariance assumes that correlation is zero,
      which is why Model B collapses under diag (Table 2).
-  -> The Sideways-state correlation is highest in Q1 (0.496), the one
+  -> The Medium-volatility-state correlation is highest in Q1 (0.496), the one
      quarter where the volume model clearly wins.
 
 ==============================================================================
@@ -422,7 +424,7 @@ So a 3-state model does not give you 3 regimes plus a crash. It gives:
     2             1       0.01%               the crash bar
 
   Two of the three hidden states are spent on ten bars. There is no
-  Bull/Sideways/Bear left to report for that cell. The crash is not
+  Low/Medium/High volatility states left to report for that cell. The crash is not
   MODELLED, it is MEMORISED.
 
 WHAT IT COSTS
@@ -511,7 +513,7 @@ SECTION 13.  SUMMARY OF FINDINGS
  4. Q3 is a clean negative: 0 of 12 cells, all clean fits, average -11.72%.
     Volume never helps in Q3 on any coin or timeframe.
 
- 5. Q4 IS NOT A RESULT, and the current run proves it from the inside.
+ 5. Q4 WAS NOT A VALID RESULT in this run; the fit diagnostics show why.
     Counting every cell, Model B wins 7 of 12. Counting only cells where
     no hidden state collapsed, it wins 2 of 6 - BTC 15m +0.68% and ETH 30m
     +0.63%, both under one percent. All five of the extra 'wins' are
@@ -572,7 +574,7 @@ SECTION 14.  WHAT TO DO
    forces conditional independence given the state and discards the
    volume/range correlation the thesis question is about; full is the
    general case and diag is a restriction of it. Both pipelines are
-   currently set to 'full' and must stay in sync.
+   set to 'full' in this historical analysis; keep implementations in sync.
 
 2. Report the covariance sensitivity as a finding, not a footnote. Table 1
    vs Table 2 shows that a standard, rarely-discussed implementation
@@ -583,15 +585,12 @@ SECTION 14.  WHAT TO DO
    Q4 both ways and declines to claim it under either.
 
 4. Add a degeneracy guard: reject or flag any fit where a state holds
-   under ~1% of bars. Right now four Q4 cells produce publishable-looking
-   LL/AIC/BIC numbers from collapsed models, and main.py exports them to
-   data/processed/ without complaint.
+   under ~1% of bars. In this historical run, four Q4 cells produced
+   publishable-looking LL/AIC/BIC numbers from collapsed models. The
+   current main.py has a degeneracy guard.
 
-5. Decide and document the crash policy. EXCLUDED_WINDOWS is currently
-   empty, so the event is in the sample. That is defensible provided the
-   degenerate Q4 cells are excluded from the analysis and reported as
-   such. The alternative - winsorising returns at a stated threshold -
-   keeps the event in the timeline without the state collapse.
+5. Document the crash policy. EXCLUDED_WINDOWS was empty in this run, so
+   the event was in the sample. Current code excludes the event window.
 
 6. Do not present LL, AIC and BIC as three separate confirmations. They
    agree by construction here. Say so, and pick one.
