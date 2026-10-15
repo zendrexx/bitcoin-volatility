@@ -239,7 +239,9 @@ Agreement below means the percentage of **identical training timestamps** receiv
 
 At BTC 15m, B is closer to A than C is. At LTC 15m, C is substantially closer to A than B is. This supports the observation that changing features affects different coins differently. It does not establish that closeness to A is desirable or that one model is consistently more effective.
 
-The agreement shown in 2025 analysis uses the visible time window and independent quarterly fits. It can differ from this annual table because the fits and selected timestamps differ. Live market omits the agreement text.
+Both 2025 analysis and Live market show a compact agreement table for A-B, A-C, and A-D, together with the fraction of compared candles where all four agree. The same-regime and High/non-High percentages use all valid candle timestamps in the visible window, independently of chart downsampling. The **Agree / compared** column shows the number assigned the same regime divided by the number with valid assignments from both models. Different pairs can have the same denominator because they use the same candle timestamps, while their agreeing counts differ. The all-four summary shows its agreeing / compared counts and requires valid assignments from every model. Missing or failed assignments are excluded rather than counted as matches. Sliding, zooming, or receiving live updates refreshes the table.
+
+Live market additionally shows **next-state overlap** for each pair using its latest Low/Medium/High probability distributions: `100 * (1 - 0.5 * sum(abs(p[k] - q[k])))`, for the three regimes. Identical distributions give 100%; disjoint distributions give 0%. This column uses the latest forecast even when the chart is panned to older dates. It describes how similar the forecasts are and does not measure predictive accuracy. The historical view compares fitted regimes; it does not manufacture historical next-state forecasts. Its quarterly fits and the live posterior assignments use different samples and decoding procedures from the annual Viterbi table above.
 
 ## SOP 3: Quarterly differences
 
@@ -349,7 +351,7 @@ The following paragraphs describe the implemented study design. The numerical ob
 | Complete guide tables | [update_model_guide.py](src/HMM/update_model_guide.py): reads all 48 annual models and all 192 quarterly outcomes. |
 | Annual training and saved parameters | [train_2025.py](src/HMM/train_2025.py) calls `server.py`: `train_2025_models()`. Bundles are in `src/HMM/data/models/2025/`. |
 | Current state probabilities and next-state distribution | `server.py`: `infer_saved_models()` uses `predict_proba()` and the learned transition matrix. |
-| Comparison charts and visible-window agreement | [dashboard.html](src/HMM/dashboard.html): `buildComparisonCharts()` and `updateComparisonAgreement()`. The 2025 analysis views are Regime Comparison and Log-Likelihood; agreement text is shown only in 2025 analysis. |
+| Comparison charts, agreement, and live forecast overlap | [dashboard.html](src/HMM/dashboard.html): `buildComparisonCharts()`, `modelAgreement()`, `nextStateOverlap()`, and `updateComparisonAgreement()`. Both modes compare A-B, A-C, and A-D; live mode also compares the latest next-state distributions. |
 
 Standardization follows the [scikit-learn StandardScaler definition](https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.StandardScaler.html): subtract the training mean and divide by the training standard deviation. This rescales units; it does not assign a manually chosen importance to each feature or guarantee that feature distributions become Gaussian. The numerical findings in this guide come from the repository's data and models, rather than the library documentation.
 

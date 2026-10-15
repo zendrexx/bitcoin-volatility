@@ -79,7 +79,17 @@ select{font-size:12px;border:1px solid #d0d0c8;border-radius:6px;padding:5px 10p
 .forecast-state strong{display:block;font-size:12px;color:#333}
 .forecast-state span{display:block;margin-top:3px;color:#666}
 .forecast-caveat{font-size:10px;color:#805b16;margin-top:6px}
-.agreement{display:none;font-size:11px;color:#555;background:#f7f7f4;border:1px solid #e5e5dc;border-radius:6px;padding:6px 9px;margin:0 0 10px}
+.agreement{display:none;font-size:11px;color:#555;background:#f7f7f4;border:1px solid #e5e5dc;border-radius:6px;padding:10px 12px;margin:0 0 10px}
+.agreement-heading{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:3px}
+.agreement-heading strong{font-size:12px;color:#333}
+.agreement-scope{font-size:10px;color:#777;margin-bottom:6px}
+.agreement-scroll{overflow-x:auto}
+.agreement table{width:100%;border-collapse:collapse;white-space:nowrap;font-variant-numeric:tabular-nums}
+.agreement th,.agreement td{padding:5px 8px;text-align:right;border-bottom:1px solid #e5e5dc}
+.agreement th{font-weight:500;color:#666}
+.agreement th:first-child{padding-left:0;text-align:left;color:#333}
+.agreement th:last-child,.agreement td:last-child{padding-right:0}
+.agreement tbody tr:last-child th,.agreement tbody tr:last-child td{border-bottom:0}
 @media(max-width:600px){.forecast-states{grid-template-columns:1fr}}
 
 </style>
@@ -136,8 +146,7 @@ select{font-size:12px;border:1px solid #d0d0c8;border-radius:6px;padding:5px 10p
     <div class="card">
       <div class="card-title" id="comparison-title">2025 Price and Volatility Regimes</div>
       <div class="legend" id="regime-state-leg"></div>
-      <p class="hint" id="comparison-hint" style="margin:0 0 10px">Every model uses the same closing-price data, UTC dates, and price scale. Green, amber, and red show its inferred volatility regime; gray shows dates without a valid fit.</p>
-      <p class="agreement" id="comparison-agreement"></p>
+      <section class="agreement" id="comparison-agreement" aria-label="Agreement between Models A to D"></section>
       <div class="timeline-tools">
         <label for="view-window">Visible window</label>
         <select id="view-window" onchange="changeComparisonWindow(this.value)">
@@ -189,6 +198,7 @@ const VOL_WINDOW = 10;
 const M_COLORS = ['#378ADD','#1D9E75','#D85A30','#7F77DD'];
 const M_DASHES = [[], [6,3], [3,3], [8,3,2,3]];
 const M_NAMES  = ['Model A','Model B','Model C','Model D'];
+const MODEL_PAIRS = [[0,1],[0,2],[0,3]];
 const M_FEAT   = [
   'Absolute Log Return + High-Low Range',
   'Absolute Log Return + High-Low Range + Volume',
@@ -235,6 +245,7 @@ function makeRegimeLegends(){
 }
 
 function updateForecastCards(forecasts, timeframe){
+  comparisonView.forecasts=forecasts;
   for(let m=0;m<4;m++){
     const id=String.fromCharCode(65+m);
     const card=document.getElementById('forecast-'+id.toLowerCase());
@@ -257,6 +268,7 @@ function updateForecastCards(forecasts, timeframe){
       `<div class="forecast-states">${states}</div>`+
       (closeLowMedium ? '<div class="forecast-caveat">Low and Medium have similar 2025 averages for this model.</div>' : '');
   }
+  updateComparisonAgreement();
 }
 
 // ── Coin tabs ───────────────────────────────────────────────────────────────
@@ -663,39 +675,66 @@ function comparisonPriceLimits(){
   return {min:low-padding,max:high+padding};
 }
 
-function updateComparisonAgreement(){
-  const {times,states,start,span}=comparisonView;
-  const el=document.getElementById('comparison-agreement');
-  if(comparisonView.mode==='live'){
-    el.style.display='none';
-    el.textContent='';
-    return;
-  }
-  el.style.display='block';
-  if(!times?.length || !states?.length){el.textContent='No comparable regimes in this window.';return;}
+function modelAgreement(times, states, start, end){
+  const pairs=MODEL_PAIRS.map(([first,second])=>({first,second,total:0,same:0,highSame:0}));
+  let allTotal=0, allSame=0;
   let left=0,right=times.length;
   while(left<right){
     const mid=(left+right)>>1;
     if(times[mid]<start) left=mid+1; else right=mid;
   }
-  const counts=[[0,0,0],[0,0,0]];
-  for(let i=left;i<times.length && times[i]<=start+span;i++){
-    const a=states[0][i];
-    if(!Number.isInteger(a)) continue;
-    for(const [pair,other] of [[0,1],[1,2]]){
-      const value=states[other][i];
-      if(!Number.isInteger(value)) continue;
-      counts[pair][0]++;
-      if(a===value) counts[pair][1]++;
-      if((a===2)===(value===2)) counts[pair][2]++;
+  const valid=state=>Number.isInteger(state) && state>=0 && state<3;
+  for(let i=left;i<times.length && times[i]<=end;i++){
+    const current=[0,1,2,3].map(m=>states[m]?.[i]);
+    if(current.every(valid)){
+      allTotal++;
+      if(current.every(state=>state===current[0])) allSame++;
+    }
+    for(const pair of pairs){
+      const a=current[pair.first], b=current[pair.second];
+      if(!valid(a) || !valid(b)) continue;
+      pair.total++;
+      if(a===b) pair.same++;
+      if((a===2)===(b===2)) pair.highSame++;
     }
   }
-  const pct=(count,total)=>total ? (100*count/total).toFixed(1)+'%' : 'N/A';
-  el.textContent=`Visible-window regime agreement: A–B ${pct(counts[0][1],counts[0][0])} `+
-    `vs A–C ${pct(counts[1][1],counts[1][0])} · `+
-    `High/non-High agreement: A–B ${pct(counts[0][2],counts[0][0])}, `+
-    `A–C ${pct(counts[1][2],counts[1][0])}. `+
-    'The price line is identical on all four charts.';
+  return {pairs,allTotal,allSame};
+}
+
+function nextStateOverlap(first, second){
+  const valid=p=>Array.isArray(p) && p.length===3 &&
+    p.every(v=>Number.isFinite(v) && v>=0 && v<=1) &&
+    Math.abs(p.reduce((sum,v)=>sum+v,0)-1)<1e-6;
+  if(!valid(first) || !valid(second)) return null;
+  return Math.max(0,Math.min(1,1-first.reduce((sum,p,i)=>sum+Math.abs(p-second[i]),0)/2));
+}
+
+function updateComparisonAgreement(){
+  const {times=[],states=[],start=0,span=0,mode,forecasts}=comparisonView;
+  const el=document.getElementById('comparison-agreement');
+  const {pairs,allTotal,allSame}=modelAgreement(times,states,start,start+span);
+  const live=mode==='live';
+  const pct=(count,total)=>total ? (100*count/total).toFixed(1)+'%' : '—';
+  const count=new Intl.NumberFormat('en-US');
+  const rows=pairs.map(pair=>{
+    const first=String.fromCharCode(65+pair.first), second=String.fromCharCode(65+pair.second);
+    const overlap=live ? nextStateOverlap(forecasts?.[first]?.next_state_probabilities,
+      forecasts?.[second]?.next_state_probabilities) : null;
+    return `<tr><th scope="row">${first}–${second}</th>`+
+      `<td>${pct(pair.same,pair.total)}</td><td>${pct(pair.highSame,pair.total)}</td>`+
+      `<td>${count.format(pair.same)} / ${count.format(pair.total)}</td>`+
+      (live ? `<td>${overlap===null ? '—' : (100*overlap).toFixed(1)+'%'}</td>` : '')+'</tr>';
+  }).join('');
+  el.style.display='block';
+  el.innerHTML=`<div class="agreement-heading"><strong>Model agreement</strong>`+
+    `<span>All four agree: ${pct(allSame,allTotal)} · ${count.format(allSame)} / ${count.format(allTotal)} candles</span></div>`+
+    `<div class="agreement-scope">Visible-window regimes${live ? ' · latest next-state probabilities' : ''}</div>`+
+    '<div class="agreement-scroll"><table><thead><tr><th scope="col">Models</th>'+
+    '<th scope="col" title="Percentage of compared candles assigned the same Low, Medium, or High regime">Same regime</th>'+
+    '<th scope="col" title="Percentage of compared candles where both models agree on High versus Low or Medium">High / non-High</th>'+
+    '<th scope="col" title="Candles assigned the same regime / candles with valid assignments from both models">Agree / compared</th>'+
+    (live ? '<th scope="col" title="Overlap of the latest Low/Medium/High next-state probability distributions. 100% means identical probabilities; this uses the latest forecast even when you pan to earlier dates.">Next-state overlap</th>' : '')+
+    `</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function syncComparisonControls(){
@@ -820,10 +859,7 @@ function buildComparisonCharts(regimeSeries, coin, timeframe, mode='history'){
   document.getElementById('comparison-title').textContent =
     (mode==='live' ? 'Live ' : '2025 ') + coin +
     ' / USDT Close Price and Volatility Regimes (' + timeframe + ')';
-  const hint=document.getElementById('comparison-hint');
-  hint.style.display=mode==='live'?'none':'block';
-  hint.textContent=mode==='live' ? '' : 'All four charts share the same closing-price data, UTC dates, and price scale. Colors show each quarterly model fit; dashed markers mark independent quarters.';
-  document.getElementById('comparison-agreement').style.display=mode==='live'?'none':'block';
+  document.getElementById('comparison-agreement').style.display='block';
   for(let m=0;m<4;m++)
     document.getElementById('forecast-'+String.fromCharCode(97+m)).style.display=
       mode==='live'?'block':'none';
@@ -853,6 +889,7 @@ function buildComparisonCharts(regimeSeries, coin, timeframe, mode='history'){
   view.frame=null;
   view.key=key;
   view.mode=mode;
+  view.forecasts=null;
   view.times=times;
   view.prices=prices;
   view.states=states;
