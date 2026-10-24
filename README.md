@@ -13,7 +13,20 @@ Each live model shows the probability of Low, Medium, and High volatility on the
 
 The current-state percentage measures the model's assignment to that hidden state; a larger number does not mean better model accuracy or a better trade. All four models use absolute log return, `|ln(close_now / close_previous)|`, and high-low range. Model B adds volume, Model C adds rolling volatility, and Model D adds both. The absolute value makes equal-sized upward and downward moves identical inputs for the return feature. Rolling volatility remains the standard deviation of ten signed log returns. To order the fitted states as Low, Medium, and High, the server averages that measure over all 2025 training candles assigned to each state. The displayed volatility is this full-training-set state average, rather than a reading from the latest ten live candles.
 
-Both 2025 analysis and Live market show A-B, A-C, and A-D agreement and the percentage of candles where all four agree. The table compares regimes over the visible time window, skips missing assignments, and shows each pair's agreeing candle count divided by the number compared. The all-four summary also shows agreeing / compared counts. Live market also compares the latest next-state probability distributions: next-state overlap is 100% for identical distributions and 0% for disjoint distributions. The 2025 analysis views are Regime Comparison and Log-Likelihood.
+Both 2025 analysis and Live market show A-B, A-C, and A-D regime agreement. Live market also compares next-state distributions over aligned closed candles in the visible window: mean overlap, mean Jensen-Shannon divergence (JSD), mean directional KL(A || other), and Top-1 next-state agreement. Expand **More statistics, latest forecast, and rankings** for medians, infinite KL counts, the separate latest-candle values, and four independent rankings. Rankings use timestamps shared by all three comparison models; JSD is the primary divergence metric. These measures describe agreement with baseline A.
+
+JSD and KL use base-2 logarithms. JSD ranges from 0 to 1; KL is unbounded and can be infinite when another model assigns zero probability to a state A considers possible. Infinite values remain in means and medians and are displayed explicitly. Forecasts use forward filtering with past observations only, the saved 2025 scalers and models, and Low/Medium/High state alignment. Closed-candle filter context is carried through streaming updates; provisional candles are excluded from window averages and shown separately in the latest comparison. The existing overlap formula equals the requested probability-mass intersection and retains its meaning.
+
+The 2025 quarterly fits use their entire quarters for training, so their fitted-regime agreement remains available while past-only forecast metrics are labeled unavailable. No pre-quarter forecast models are reconstructed or retrained for this comparison. The 2025 analysis views remain Regime Comparison and Log-Likelihood. See [MODEL_GUIDE.md](MODEL_GUIDE.md#next-state-probability-comparison) for thesis interpretation and limitations.
+
+## Comparison tests
+
+```bash
+python -B -m unittest discover -s src/HMM/tests -p "test_*.py" -v
+node --test src/HMM/tests/test_dashboard_forecasts.cjs
+```
+
+The tests cover divergence identities and bounds, asymmetric/infinite KL, exact timestamp and state alignment, causal historical prefixes, streaming context, in-sample forecast exclusion, window statistics, rankings, and frontend/backend consistency.
 
 To prepare models ahead of time, run `python src/HMM/train_2025.py --coin all --tf all` (or choose one coin and timeframe). Add `--force` to replace saved bundles after changing the training data or model code. This takes several minutes per selection. Live mode requires network access to Binance Spot's public market-data REST and WebSocket endpoints; it shows an error when the feed is unavailable.
 

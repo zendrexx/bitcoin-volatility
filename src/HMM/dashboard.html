@@ -90,6 +90,11 @@ select{font-size:12px;border:1px solid #d0d0c8;border-radius:6px;padding:5px 10p
 .agreement th:first-child{padding-left:0;text-align:left;color:#333}
 .agreement th:last-child,.agreement td:last-child{padding-right:0}
 .agreement tbody tr:last-child th,.agreement tbody tr:last-child td{border-bottom:0}
+.agreement-details{margin-top:8px}
+.agreement-details summary{cursor:pointer;font-size:10px;color:#555}
+.agreement-details h3{font-size:11px;font-weight:600;margin:10px 0 3px}
+.metric-sub{display:block;font-size:10px;color:#777}
+.agreement-interpretation{font-size:10px;color:#666;white-space:normal;margin-top:7px}
 @media(max-width:600px){.forecast-states{grid-template-columns:1fr}}
 
 </style>
@@ -214,6 +219,7 @@ let activeCoin = 'btc';
 let liveSocket = null;
 let liveReconnect = null;
 let liveBars = [];
+let liveFilterState = null;
 let liveGeneration = 0;
 let inferenceSerial = 0;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -250,7 +256,7 @@ function updateForecastCards(forecasts, timeframe){
     const id=String.fromCharCode(65+m);
     const card=document.getElementById('forecast-'+id.toLowerCase());
     const forecast=forecasts?.[id];
-    if(!forecast){card.textContent='Next-state probabilities unavailable for this model.';continue;}
+    if(!forecast?.next_state_probabilities){card.textContent='Next-state probabilities unavailable for this model.';continue;}
     const current=forecast.current_state;
     const confidence=(100*forecast.current_probability).toFixed(1);
     const states=REGIME_NAMES.map((name,tier)=>{
@@ -421,6 +427,7 @@ function stopLive(){
     liveSocket=null;
   }
   liveBars=[];
+  liveFilterState=null;
 }
 
 async function runLive(){
@@ -443,6 +450,7 @@ async function runLive(){
     if(generation!==liveGeneration) return;
     if(!response.ok) throw new Error(data.error || 'Server returned '+response.status);
     liveBars=data.bars;
+    liveFilterState=data.regime_series.Q1.filter_state;
     lastData={...data,live:true};
     buildComparisonCharts(data.regime_series,data.coin,data.tf,'live');
     updateForecastCards(data.regime_series.Q1.forecast,tf);
@@ -510,11 +518,15 @@ async function receiveLiveCandle(row,closed,coin,tf,generation){
     view.times.push(time);
     view.prices.push(close);
     for(const modelStates of view.states) modelStates.push(null);
+    for(const rows of view.probabilityRows) rows.push(null);
+    view.forecastClosed.push(false);
     const oldest=time-30*DAY_MS-(VOL_WINDOW+2)*view.timeframeMs;
     while(view.times.length>1 && view.times[0]<oldest){
       view.times.shift();
       view.prices.shift();
       for(const modelStates of view.states) modelStates.shift();
+      for(const rows of view.probabilityRows) rows.shift();
+      view.forecastClosed.shift();
     }
     view.domainStart=view.times[0];
     view.domainEnd=time;
@@ -530,15 +542,25 @@ async function receiveLiveCandle(row,closed,coin,tf,generation){
   try{
     const response=await fetch(API+'/api/live/infer',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({coin,tf,bars:liveBars,closed})
+      body:JSON.stringify({coin,tf,bars:liveBars,closed,filter_state:liveFilterState})
     });
     const result=await response.json();
     if(generation!==liveGeneration || serial!==inferenceSerial) return;
+    if(result.reset_required){await runLive();return;}
     if(!response.ok) throw new Error(result.error || 'Inference failed');
     if(result.time!==view.times[view.times.length-1]) return;
-    for(let m=0;m<4;m++){
-      const id=String.fromCharCode(65+m);
-      view.states[m][view.states[m].length-1]=result.models[id];
+    liveFilterState=result.filter_state || liveFilterState;
+    const positions=new Map(view.times.map((t,i)=>[t,i]));
+    const comparison=result.forecast_comparison;
+    assertForecastStateOrder(comparison);
+    if(JSON.stringify(result.timestamps)!==JSON.stringify(comparison.timestamps))
+      throw new Error('Forecast timestamps must match the inference timestamps');
+    for(let j=0;j<result.timestamps.length;j++){
+      const index=positions.get(result.timestamps[j]);
+      if(index===undefined) continue;
+      for(let m=0;m<4;m++) view.states[m][index]=result.model_series[String.fromCharCode(65+m)]?.[j] ?? null;
+      view.forecastClosed[index]=Boolean(comparison.closed[j]);
+      for(let pair=0;pair<3;pair++) view.probabilityRows[pair][index]=forecastMetricAt(comparison,pair,j);
     }
     updateForecastCards(result.forecast,tf);
     if(view.frame===null) view.frame=requestAnimationFrame(updateComparisonCharts);
@@ -592,12 +614,16 @@ function quarterMarkerPlugin(regimeSeries){
 function comparisonData(regimeSeries){
   const times = [], prices = [];
   const states = M_NAMES.map(()=>[]);
+  const probabilityRows=MODEL_PAIRS.map(()=>[]), forecastClosed=[];
   QUARTERS.forEach(q=>{
     const quarter = regimeSeries?.[q];
     if(!quarter) return;
     const priceTimes = quarter.price_timestamps || [];
     const close = quarter.close_prices || [];
     const regimeTimes = quarter.timestamps || [];
+    const forecastComparison=quarter.forecast_comparison;
+    assertForecastStateOrder(forecastComparison);
+    const forecastPositions=new Map((forecastComparison?.timestamps || []).map((t,i)=>[t,i]));
     const modelStates = M_NAMES.map((_,m)=>quarter.models?.[String.fromCharCode(65+m)] || []);
     let regimeIndex = 0;
     for(let i=0;i<Math.min(priceTimes.length, close.length);i++){
@@ -605,12 +631,16 @@ function comparisonData(regimeSeries){
       while(regimeIndex < regimeTimes.length && regimeTimes[regimeIndex] < time) regimeIndex++;
       times.push(time);
       prices.push(close[i]);
+      const forecastIndex=forecastPositions.get(time);
+      forecastClosed.push(forecastIndex!==undefined && Boolean(forecastComparison.closed[forecastIndex]));
+      for(let pair=0;pair<3;pair++) probabilityRows[pair].push(
+        forecastIndex===undefined ? null : forecastMetricAt(forecastComparison,pair,forecastIndex));
       for(let m=0;m<4;m++){
         states[m].push(regimeTimes[regimeIndex] === time ? (modelStates[m][regimeIndex] ?? null) : null);
       }
     }
   });
-  return {times, prices, states};
+  return {times, prices, states, probabilityRows, forecastClosed};
 }
 
 function comparisonSampleIndices(){
@@ -709,6 +739,65 @@ function nextStateOverlap(first, second){
   return Math.max(0,Math.min(1,1-first.reduce((sum,p,i)=>sum+Math.abs(p-second[i]),0)/2));
 }
 
+function assertForecastStateOrder(data){
+  if(data && JSON.stringify(data.state_order)!==JSON.stringify(REGIME_NAMES))
+    throw new Error('Forecast states must be aligned as Low, Medium, High');
+}
+
+function forecastMetricAt(data,pair,index){
+  const columns=data?.pairs?.[String.fromCharCode(66+pair)];
+  if(!columns || columns.jsd_bits?.[index]==null) return null;
+  return Object.fromEntries(['overlap_percent','jsd_bits','kl_bits','top1_agreement']
+    .map(key=>[key,columns[key][index]]));
+}
+
+function summarizeForecastMetrics(rows){
+  const n=rows.length;
+  if(!n) return {n_compared:0,infinite_kl_count:0};
+  const kl=rows.map(r=>r.kl_bits==='Infinity' ? Infinity : r.kl_bits);
+  if(rows.some((r,i)=>!Number.isFinite(r.overlap_percent) || r.overlap_percent<0 || r.overlap_percent>100+1e-10 ||
+    !Number.isFinite(r.jsd_bits) || r.jsd_bits<0 || r.jsd_bits>1 ||
+    typeof kl[i]!=='number' || !(kl[i]>=0) || ![0,1].includes(r.top1_agreement))) throw new Error('Invalid forecast comparison metrics');
+  const mean=values=>values.reduce((sum,v)=>sum+v,0)/n;
+  const median=values=>{const sorted=[...values].sort((a,b)=>a-b),i=Math.floor(n/2);return n%2 ? sorted[i] : (sorted[i-1]+sorted[i])/2;};
+  return {n_compared:n,mean_overlap_percent:mean(rows.map(r=>r.overlap_percent)),
+    mean_jsd_bits:mean(rows.map(r=>r.jsd_bits)),median_jsd_bits:median(rows.map(r=>r.jsd_bits)),
+    mean_kl_bits:mean(kl),median_kl_bits:median(kl),infinite_kl_count:kl.filter(v=>v===Infinity).length,
+    top1_agreement_percent:100*mean(rows.map(r=>r.top1_agreement))};
+}
+
+function windowForecastMetrics(view){
+  const rows=MODEL_PAIRS.map(()=>[]),common=MODEL_PAIRS.map(()=>[]);
+  for(let i=0;i<(view.times?.length || 0);i++){
+    const time=view.times[i];
+    if(time<view.start) continue;
+    if(time>view.start+view.span) break;
+    if(!view.forecastClosed?.[i]) continue;
+    const current=MODEL_PAIRS.map((_,pair)=>view.probabilityRows?.[pair]?.[i]);
+    current.forEach((r,pair)=>{if(r) rows[pair].push(r);});
+    if(current.every(Boolean)) current.forEach((r,pair)=>common[pair].push(r));
+  }
+  return {pairs:rows.map(summarizeForecastMetrics),common:common.map(summarizeForecastMetrics)};
+}
+
+function rankForecastMetrics(common){
+  if(common.some(s=>!s.n_compared)) return [];
+  const definitions=[['Mean overlap','mean_overlap_percent',-1],['Mean JSD (primary)','mean_jsd_bits',1],
+    ['Mean KL(A || other)','mean_kl_bits',1],['Top-1 agreement','top1_agreement_percent',-1]];
+  return definitions.map(([name,key,direction])=>{
+    const sorted=common.map((s,i)=>({model:String.fromCharCode(66+i),value:s[key]}))
+      .sort((a,b)=>a.value===b.value ? (a.model<b.model ? -1 : 1) : direction*(a.value-b.value));
+    const groups=[];
+    for(const row of sorted){
+      const last=groups[groups.length-1];
+      if(last && (row.value===last[0].value || Math.abs(row.value-last[0].value)<1e-10)) last.push(row);
+      else groups.push([row]);
+    }
+    return {name,key,groups,best:groups[0].map(r=>r.model),
+      order:groups.map(g=>g.map(r=>r.model).join(' = ')).join(' > ')};
+  });
+}
+
 function updateComparisonAgreement(){
   const {times=[],states=[],start=0,span=0,mode,forecasts}=comparisonView;
   const el=document.getElementById('comparison-agreement');
@@ -716,25 +805,69 @@ function updateComparisonAgreement(){
   const live=mode==='live';
   const pct=(count,total)=>total ? (100*count/total).toFixed(1)+'%' : '—';
   const count=new Intl.NumberFormat('en-US');
-  const rows=pairs.map(pair=>{
+  const metrics=windowForecastMetrics(comparisonView);
+  const number=value=>value==null ? '—' : value===Infinity || value==='Infinity' ? '&infin;' : value.toFixed(4);
+  const percentage=value=>value==null ? '—' : value.toFixed(1)+'%';
+  const latest=pair=>{
+    const other=forecasts?.[String.fromCharCode(66+pair)],base=forecasts?.A;
+    return live && base && other && base.origin_time===other.origin_time && base.target_time===other.target_time
+      ? other.comparison_with_A : null;
+  };
+  const rows=pairs.map((pair,index)=>{
     const first=String.fromCharCode(65+pair.first), second=String.fromCharCode(65+pair.second);
-    const overlap=live ? nextStateOverlap(forecasts?.[first]?.next_state_probabilities,
-      forecasts?.[second]?.next_state_probabilities) : null;
+    const summary=metrics.pairs[index];
     return `<tr><th scope="row">${first}–${second}</th>`+
-      `<td>${pct(pair.same,pair.total)}</td><td>${pct(pair.highSame,pair.total)}</td>`+
-      `<td>${count.format(pair.same)} / ${count.format(pair.total)}</td>`+
-      (live ? `<td>${overlap===null ? '—' : (100*overlap).toFixed(1)+'%'}</td>` : '')+'</tr>';
+      `<td>${pct(pair.same,pair.total)}<span class="metric-sub">${count.format(pair.same)} / ${count.format(pair.total)}</span></td>`+
+      `<td>${percentage(summary.mean_overlap_percent)}</td><td>${number(summary.mean_jsd_bits)}</td>`+
+      `<td>${number(summary.mean_kl_bits)}</td><td>${percentage(summary.top1_agreement_percent)}</td>`+
+      `<td>${count.format(summary.n_compared)}</td></tr>`;
   }).join('');
+  const detailRows=pairs.map((pair,index)=>{
+    const summary=metrics.pairs[index];
+    return `<tr><th scope="row">A–${String.fromCharCode(66+index)}</th><td>${pct(pair.highSame,pair.total)}</td>`+
+      `<td>${number(summary.median_jsd_bits)}</td><td>${number(summary.median_kl_bits)}</td>`+
+      `<td>${summary.infinite_kl_count} / ${summary.n_compared}</td></tr>`;
+  }).join('');
+  const latestRows=pairs.map((_,index)=>{
+    const row=latest(index);
+    return `<tr><th scope="row">A–${String.fromCharCode(66+index)}</th><td>${percentage(row?.overlap_percent)}</td>`+
+      `<td>${number(row?.jsd_bits)}</td><td>${number(row?.kl_bits)}</td>`+
+      `<td>${row?.top1_agreement==null ? '—' : row.top1_agreement ? 'Same' : 'Different'}</td></tr>`;
+  }).join('');
+  const rankings=rankForecastMetrics(metrics.common);
+  const rankRows=rankings.map(r=>`<tr><th scope="row">${r.name}</th><td>${r.order}</td></tr>`).join('');
+  let interpretation='Rankings need closed forecast candles shared by all three comparison models.';
+  if(rankings.length){
+    const winner=rankings[0].best;
+    interpretation=winner.length===1 && rankings.every(r=>r.best.length===1 && r.best[0]===winner[0])
+      ? `Model ${winner[0]} is closest to A across all four window metrics.`
+      : `No unique winner across all four metrics. JSD (primary) favors ${rankings[1].best.join(' and ')}.`;
+    if(new Set(rankings.slice(0,3).map(r=>r.order)).size>1)
+      interpretation+=' Rankings differ: overlap measures shared mass; JSD balances both distributions; directional KL penalizes low probabilities for states A favors.';
+  }
+  const date=forecasts?.A?.origin_time;
+  const latestLabel=Number.isFinite(date) ? new Intl.DateTimeFormat('en-US',{
+    month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'UTC',timeZoneName:'short'
+  }).format(new Date(date))+(forecasts.A.provisional ? ' · open candle' : ' · closed candle') : 'unavailable';
   el.style.display='block';
   el.innerHTML=`<div class="agreement-heading"><strong>Model agreement</strong>`+
     `<span>All four agree: ${pct(allSame,allTotal)} · ${count.format(allSame)} / ${count.format(allTotal)} candles</span></div>`+
-    `<div class="agreement-scope">Visible-window regimes${live ? ' · latest next-state probabilities' : ''}</div>`+
+    `<div class="agreement-scope">${live ? 'Visible-window forecast averages · closed candles only' : 'Visible-window fitted regimes · past-only forecasts unavailable for in-sample 2025 fits'}</div>`+
     '<div class="agreement-scroll"><table><thead><tr><th scope="col">Models</th>'+
     '<th scope="col" title="Percentage of compared candles assigned the same Low, Medium, or High regime">Same regime</th>'+
-    '<th scope="col" title="Percentage of compared candles where both models agree on High versus Low or Medium">High / non-High</th>'+
-    '<th scope="col" title="Candles assigned the same regime / candles with valid assignments from both models">Agree / compared</th>'+
-    (live ? '<th scope="col" title="Overlap of the latest Low/Medium/High next-state probability distributions. 100% means identical probabilities; this uses the latest forecast even when you pan to earlier dates.">Next-state overlap</th>' : '')+
-    `</tr></thead><tbody>${rows}</tbody></table></div>`;
+    '<th scope="col" title="Mean probability-mass intersection across aligned closed candles; higher means more similar">Mean overlap</th>'+
+    '<th scope="col" title="Primary divergence: base-2 Jensen-Shannon divergence, from 0 to 1; lower means more similar">Mean JSD (bits)</th>'+
+    '<th scope="col" title="Base-2 KL(A || comparison model); unbounded, lower means more similar; infinity is retained">Mean KL (bits)</th>'+
+    '<th scope="col" title="Percentage of aligned closed candles with the same most likely NEXT regime">Top-1 agreement</th>'+
+    `<th scope="col">Forecast candles</th></tr></thead><tbody>${rows}</tbody></table></div>`+
+    '<details class="agreement-details"><summary>More statistics, latest forecast, and rankings</summary>'+
+    '<h3>Window details</h3><div class="agreement-scroll"><table><thead><tr><th>Models</th><th>High / non-High</th>'+
+    `<th>Median JSD (bits)</th><th>Median KL (bits)</th><th>Infinite KL / compared</th></tr></thead><tbody>${detailRows}</tbody></table></div>`+
+    (live ? `<h3>Latest next-candle forecast · ${latestLabel}</h3><div class="agreement-scroll"><table><thead><tr><th>Models</th>`+
+      `<th>Overlap</th><th>JSD (bits)</th><th>KL(A || other) (bits)</th><th>Top-1</th></tr></thead><tbody>${latestRows}</tbody></table></div>` : '')+
+    `<h3>Separate rankings · ${count.format(metrics.common[0].n_compared)} shared closed candles</h3>`+
+    (rankings.length ? `<div class="agreement-scroll"><table><thead><tr><th>Metric</th><th>Most to least similar (ties =)</th></tr></thead><tbody>${rankRows}</tbody></table></div>` : '')+
+    `<p class="agreement-interpretation">${interpretation} These measures describe agreement with A.</p></details>`;
 }
 
 function syncComparisonControls(){
@@ -865,7 +998,7 @@ function buildComparisonCharts(regimeSeries, coin, timeframe, mode='history'){
       mode==='live'?'block':'none';
   for(const option of document.getElementById('view-window').options)
     option.disabled = mode==='live' && ['90','180','all'].includes(option.value);
-  const {times, prices, states} = comparisonData(regimeSeries);
+  const {times, prices, states, probabilityRows, forecastClosed} = comparisonData(regimeSeries);
   if(!prices.length) return;
   const decimals = coin.toLowerCase() === 'doge' ? 4 : 2;
   const money = new Intl.NumberFormat('en-US', {
@@ -893,6 +1026,8 @@ function buildComparisonCharts(regimeSeries, coin, timeframe, mode='history'){
   view.times=times;
   view.prices=prices;
   view.states=states;
+  view.probabilityRows=probabilityRows;
+  view.forecastClosed=forecastClosed;
   view.domainStart=times[0];
   view.domainEnd=times[times.length-1];
   view.fullLow=minPrice;

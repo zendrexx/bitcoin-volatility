@@ -33,7 +33,14 @@ python update_model_guide.py      # update complete tables using saved models an
 python server.py                  # Flask dashboard on http://localhost:5050
 ```
 
-There are no tests and no linter for the Python code.
+Forecast comparison tests use Python unittest and Node's built-in test runner:
+
+```bash
+python -B -m unittest discover -s src/HMM/tests -p "test_*.py" -v
+node --test src/HMM/tests/test_dashboard_forecasts.cjs
+```
+
+`forecast_comparison.py` computes base-2 JSD/KL and exact overlap, aligns hidden-state probabilities to Low/Medium/High, and performs forward filtering. Preserve exact zero probabilities and explicit infinite KL. Live inference carries a model-signed closed-candle filter context; do not reintroduce smoothing or reset its state on every rolling 300-bar update. The 2025 in-sample quarterly fits must not be presented as historical past-only forecast comparisons. Metric calculations do not require retraining.
 
 ## Architecture
 

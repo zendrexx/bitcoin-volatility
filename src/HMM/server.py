@@ -8,6 +8,10 @@ from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from sklearn.preprocessing import StandardScaler
 from hmmlearn.hmm import GaussianHMM
+from forecast_comparison import (
+    STATE_ORDER, filter_probabilities, align_regime_probabilities,
+    normalize_probabilities, build_comparison_series,
+)
 
 DATA_DIR   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "raw")
 MODEL_DIR  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "models", "2025")
@@ -355,42 +359,89 @@ def fetch_recent_klines(coin: str, tf: str, days: int = 30) -> list:
     return rows
 
 
-def infer_saved_models(df_raw: pd.DataFrame, bundles: dict) -> dict:
+def infer_saved_models(df_raw: pd.DataFrame, bundles: dict, filter_state=None, as_of_ms=None) -> dict:
     features = base_features(df_raw)
     if len(features) < 3:
         raise ValueError("Not enough recent candles for rolling volatility")
+    as_of_ms = int(time.time() * 1000) if as_of_ms is None else int(as_of_ms)
+    tf = next(iter(bundles.values()))["tf"] if bundles else "15m"
+    interval_ms = int(tf[:-1]) * 60_000
+    times = np.asarray(epoch_milliseconds(features["time"]), dtype=np.int64)
+    if times[-1] > as_of_ms:
+        raise ValueError("A candle origin cannot be in the future")
+    seed_time = int(filter_state["time"]) if filter_state else None
+    if seed_time is not None and seed_time + interval_ms - 1 >= as_of_ms:
+        raise ValueError("Filter context must come from a closed candle")
+    selected = np.flatnonzero(times > seed_time) if seed_time is not None else np.arange(len(times))
+    reuse_seed = seed_time is not None and not len(selected) and seed_time == times[-1]
+    if reuse_seed:
+        selected = np.array([len(times) - 1])
+    if not len(selected) or (seed_time is not None and not reuse_seed and times[selected[0]] != seed_time + interval_ms):
+        raise ValueError("Filter context is outside the available candle history; refresh live data")
+    selected_times = times[selected].tolist()
+    closed = [t + interval_ms - 1 < as_of_ms for t in selected_times]
     series = {
         "price_timestamps": epoch_milliseconds(df_raw["time"]),
         "close_prices": df_raw["close"].astype(float).tolist(),
-        "timestamps": epoch_milliseconds(features["time"]),
+        "timestamps": selected_times,
         "models": {},
         "forecast": {},
+        "filter_state": None,
     }
+    next_probabilities, saved_posteriors = {}, {}
     for model_id in MODEL_COLUMNS:
         if model_id not in bundles:
-            series["models"][model_id] = [None] * len(features)
+            series["models"][model_id] = [None] * len(selected)
             series["forecast"][model_id] = None
+            next_probabilities[model_id] = [None] * len(selected)
             continue
         bundle = bundles[model_id]
-        X = bundle["scaler"].transform(
-            features[bundle["columns"]].to_numpy(dtype=float)
-        )
         hmm = bundle["hmm"]
-        posterior = hmm.predict_proba(X)
+        signature = joblib.hash((bundle["columns"], bundle["state_tiers"],
+            hmm.startprob_, hmm.transmat_, hmm.means_, hmm.covars_,
+            bundle["scaler"].mean_, bundle["scaler"].scale_))
+        previous = None
+        if filter_state:
+            saved = filter_state.get("models", {}).get(model_id)
+            if not saved or saved.get("signature") != signature:
+                raise ValueError("Saved models changed or filter context is missing; refresh live data")
+            previous = normalize_probabilities(saved["posterior"])
+            if len(previous) != hmm.n_components:
+                raise ValueError("Filter context has the wrong hidden-state dimension")
+        X = bundle["scaler"].transform(
+            features.iloc[selected][bundle["columns"]].to_numpy(dtype=float)
+        )
+        posterior = previous[None, :] if reuse_seed else filter_probabilities(hmm, X, previous)
         states = posterior.argmax(axis=1)
         series["models"][model_id] = [
             bundle["state_tiers"][int(state)] for state in states
         ]
-        next_hidden = posterior[-1] @ hmm.transmat_
-        next_tiers = [0.0, 0.0, 0.0]
-        for hidden_state, probability in enumerate(next_hidden):
-            next_tiers[bundle["state_tiers"][hidden_state]] += float(probability)
+        next_tiers = align_regime_probabilities(posterior @ hmm.transmat_, bundle["state_tiers"])
+        cutoff = int(bundle["training_end_ms"])
+        next_probabilities[model_id] = [p.tolist() if t > cutoff else None for t, p in zip(selected_times, next_tiers)]
         series["forecast"][model_id] = {
             "current_state": bundle["state_tiers"][int(states[-1])],
             "current_probability": float(posterior[-1, states[-1]]),
-            "next_state_probabilities": next_tiers,
+            "next_state_probabilities": next_probabilities[model_id][-1],
             "tier_mean_rolling_vol": bundle["tier_mean_rolling_vol"],
+            "origin_time": selected_times[-1], "target_time": selected_times[-1] + interval_ms,
+            "provisional": not closed[-1],
         }
+        if any(closed):
+            last_closed = max(i for i, value in enumerate(closed) if value)
+            saved_posteriors[model_id] = {"posterior": posterior[last_closed].tolist(), "signature": signature}
+    if saved_posteriors:
+        series["filter_state"] = {"time": selected_times[last_closed], "models": saved_posteriors}
+    series["forecast_comparison"] = build_comparison_series(selected_times, next_probabilities, closed)
+    series["forecast_comparison"].update({
+        "method": "causal_filter", "target_timestamps": [t + interval_ms for t in selected_times],
+        "information_timestamps": [min(t + interval_ms - 1, as_of_ms) for t in selected_times],
+        "trained_through": {mid: int(b["training_end_ms"]) for mid, b in bundles.items()},
+    })
+    for mid in "BCD":
+        if series["forecast"].get(mid):
+            columns = series["forecast_comparison"]["pairs"][mid]
+            series["forecast"][mid]["comparison_with_A"] = {key: values[-1] for key, values in columns.items()}
     return series
 
 # ── Routes ────────────────────────────────────────────────────────────────
@@ -481,7 +532,7 @@ def api_live():
         interval_ms = int(tf[:-1]) * 60_000
         if now_ms - int(rows[-1][0]) > 2 * interval_ms:
             raise ValueError("The latest Binance candle is stale")
-        series = infer_saved_models(df_raw, bundles)
+        series = infer_saved_models(df_raw, bundles, as_of_ms=now_ms)
         return jsonify({
             "coin": coin.upper(), "tf": tf, "source": "Binance Spot",
             "training_year": YEAR, "as_of": now_ms,
@@ -512,16 +563,21 @@ def api_live_infer():
         bundles, missing = load_saved_models(coin, tf)
         if not bundles:
             return jsonify({"error": "No saved 2025 models"}), 409
-        series = infer_saved_models(df_raw, bundles)
+        series = infer_saved_models(df_raw, bundles, filter_state=payload.get("filter_state"))
         return jsonify({
             "time": series["price_timestamps"][-1],
             "close": series["close_prices"][-1],
             "models": {model_id: values[-1] for model_id, values in series["models"].items()},
             "forecast": series["forecast"],
+            "timestamps": series["timestamps"], "model_series": series["models"],
+            "forecast_comparison": series["forecast_comparison"],
+            "filter_state": series["filter_state"],
             "missing_models": missing,
             "provisional": not bool(payload.get("closed", False)),
         })
     except (ValueError, KeyError, TypeError) as exc:
+        if payload.get("filter_state"):
+            return jsonify({"error": str(exc), "reset_required": True}), 409
         return jsonify({"error": str(exc)}), 400
 
 @app.route("/api/characteristics")
