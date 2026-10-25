@@ -29,8 +29,7 @@ def add_volume_surprise(df: pd.DataFrame) -> pd.DataFrame:
 
 def run(tf: str = "15m"):
     print(f"Volume surprise by regime — regimes fitted WITHOUT volume (Model C, BTC {tf})")
-    print(f"{'Q':<4}{'Low (Bull)':>12}{'Medium':>12}{'High (Bear)':>13}{'monotone':>10}")
-
+   
     for q in QUARTERS:
         path = find_file(tf, q)
         if path is None:
