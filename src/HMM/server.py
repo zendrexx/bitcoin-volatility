@@ -150,6 +150,7 @@ def run_hmm(coin: str, tf: str, quarter: str, n_states: int) -> tuple[list[dict]
         return [], None
 
     results = []
+    distribution_probabilities = {}
     regime_series = {
         "timestamps": epoch_milliseconds(df["time"]),
         "models": {},
@@ -178,6 +179,7 @@ def run_hmm(coin: str, tf: str, quarter: str, n_states: int) -> tuple[list[dict]
                     "state_occupancy": occupancy.round(4).tolist(),
                 })
                 regime_series["models"][model_id] = [None] * len(states)
+                distribution_probabilities[model_id] = [None] * len(df)
                 continue
 
             metrics = compute_metrics(hmm, X)
@@ -195,6 +197,12 @@ def run_hmm(coin: str, tf: str, quarter: str, n_states: int) -> tuple[list[dict]
             regime_series["models"][model_id] = [
                 int(regime_order[int(state)]) for state in states
             ]
+            # Descriptive distributions conditional on the full-quarter fit.
+            # These are not forecasts from parameters available earlier in 2025.
+            if n_states == 3:
+                filtered = filter_probabilities(hmm, X)
+                next_states = align_regime_probabilities(filtered @ hmm.transmat_, regime_order)
+                distribution_probabilities[model_id] = next_states.tolist()
 
             results.append({
                 "coin":        coin.upper(),
@@ -210,10 +218,20 @@ def run_hmm(coin: str, tf: str, quarter: str, n_states: int) -> tuple[list[dict]
             })
         except Exception as e:
             regime_series["models"][model_id] = [None] * len(df)
+            distribution_probabilities[model_id] = [None] * len(df)
             results.append({
                 "coin": coin.upper(), "timeframe": tf, "quarter": quarter,
                 "model": f"Model {model_id}", "error": str(e)
             })
+    if n_states == 3:
+        regime_series["distribution_comparison"] = build_comparison_series(
+            regime_series["timestamps"], distribution_probabilities, [True] * len(df))
+        regime_series["distribution_comparison"].update({
+            "method": "in_sample_quarter_fit",
+            "is_out_of_sample": False,
+            "past_only_forecasts_available": False,
+            "description": "Descriptive next-state distributions conditional on full-quarter fitted parameters",
+        })
     return results, regime_series
 
 

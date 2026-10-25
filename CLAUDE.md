@@ -40,7 +40,7 @@ python -B -m unittest discover -s src/HMM/tests -p "test_*.py" -v
 node --test src/HMM/tests/test_dashboard_forecasts.cjs
 ```
 
-`forecast_comparison.py` computes base-2 JSD/KL and exact overlap, aligns hidden-state probabilities to Low/Medium/High, and performs forward filtering. Preserve exact zero probabilities and explicit infinite KL. Live inference carries a model-signed closed-candle filter context; do not reintroduce smoothing or reset its state on every rolling 300-bar update. The 2025 in-sample quarterly fits must not be presented as historical past-only forecast comparisons. Metric calculations do not require retraining.
+`forecast_comparison.py` computes base-2 JSD/KL and exact overlap, aligns hidden-state probabilities to Low/Medium/High, and performs forward filtering. Preserve exact zero probabilities and explicit infinite KL. Live inference carries a model-signed closed-candle filter context; do not reintroduce smoothing or reset its state on every rolling 300-bar update. The dashboard defaults to 2025 analysis and exposes live mode as optional. `run_hmm()` reuses its existing quarterly fits to produce explicitly in-sample `distribution_comparison` data, labeled Compared candles in the UI. These descriptive values must not be presented as past-only forecasts. Live `forecast_comparison` data retains its separate training-cutoff checks and Forecast candles label. Do not fit a second model set solely for the comparison metrics.
 
 ## Architecture
 

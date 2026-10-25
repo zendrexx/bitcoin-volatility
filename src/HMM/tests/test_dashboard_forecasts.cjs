@@ -96,13 +96,14 @@ test('latest provisional metrics are distinct from window means, with explicit i
   assert.equal(e.run('windowForecastMetrics(comparisonView).pairs[0].mean_overlap_percent'),before);
 });
 
-test('2025 in-sample regime comparisons do not claim historical forecast metrics',()=>{
+test('2025 in-sample comparisons are labeled separately from live forecasts',()=>{
   const e=environment();
   e.run("comparisonView={times:[0],states:[[0],[0],[1],[2]],start:0,span:1,mode:'history'};updateComparisonAgreement();");
   const rendered=e.elements['comparison-agreement'].innerHTML;
-  assert(rendered.includes('past-only forecasts unavailable'));
+  assert(rendered.includes('2025 in-sample comparison'));
   assert(!rendered.includes('Latest next-candle forecast'));
-  assert(rendered.includes('100.0%')&&rendered.includes('Forecast candles'));
+  assert(rendered.includes('100.0%')&&rendered.includes('Compared candles'));
+  assert(!rendered.includes('Forecast candles'));
 });
 
 test('four price charts build and keep forecast metrics aligned through live/history switches',()=>{
@@ -125,5 +126,51 @@ test('four price charts build and keep forecast metrics aligned through live/his
   e.run("buildComparisonCharts(input,'BTC','15m','history');");
   assert.equal(e.run('Object.keys(charts).length'),4);
   assert.equal(e.run('windowForecastMetrics(comparisonView).pairs[0].n_compared'),0);
-  assert(e.elements['comparison-agreement'].innerHTML.includes('past-only forecasts unavailable'));
+  assert(e.elements['comparison-agreement'].innerHTML.includes('2025 in-sample comparison'));
+});
+
+test('2025 is selected on first load and initial analysis does not request live data',async()=>{
+  assert.match(html,/<option value="history" selected>2025 analysis<\/option>/);
+  assert.doesNotMatch(html,/<option value="live" selected>/);
+  const e=environment(),requests=[];
+  e.elements['mode-sel'].value='history';
+  e.context.document.querySelectorAll=()=>[];
+  for(const element of Object.values(e.elements)) element.classList={add(){},remove(){}};
+  e.context.fetch=async url=>{
+    requests.push(url);
+    return {ok:true,json:async()=>({coin:'BTC',tf:'15m',available:['Q1'],missing:[],
+      results:[{model:'Model A',quarter:'Q1',log_likelihood:1}],regime_series:{Q1:{}}})};
+  };
+  e.run("renderAll=()=>{};runLive=()=>{throw new Error('Live must be optional');};");
+  await e.run('runAnalysis()');
+  assert.equal(requests.length,1);
+  assert(requests[0].includes('/api/run?'));
+  assert(e.elements['run-btn'].textContent.includes('Run 2025 Analysis'));
+});
+
+test('2025 quarterly distribution data populates all comparison statistics and counts',()=>{
+  const e=environment();
+  const times=[1000,2000,3000];
+  const columns={overlap_percent:[80,90,100],jsd_bits:[0.2,0.1,0],kl_bits:[0.4,0.2,0],top1_agreement:[0,1,1]};
+  e.context.input={Q1:{price_timestamps:times,close_prices:[100,101,102],timestamps:times,
+    models:{A:[0,1,2],B:[0,1,2],C:[0,1,2],D:[0,1,2]},
+    distribution_comparison:{method:'in_sample_quarter_fit',state_order:['Low volatility','Medium volatility','High volatility'],
+      timestamps:times,closed:[true,true,true],pairs:{B:columns,C:columns,D:columns}}}};
+  e.run("comparisonView={...comparisonData(input),start:1000,span:2000,mode:'history'};updateComparisonAgreement();");
+  const summary=e.run('windowForecastMetrics(comparisonView).pairs[0]');
+  assert.equal(summary.n_compared,3);
+  assert.equal(summary.mean_overlap_percent,90);
+  assert(Math.abs(summary.mean_jsd_bits-0.1)<1e-12);
+  const rendered=e.elements['comparison-agreement'].innerHTML;
+  assert(rendered.includes('90.0%')&&rendered.includes('0.1000')&&rendered.includes('0.2000'));
+  assert(rendered.includes('66.7%')&&rendered.includes('Compared candles'));
+  assert(rendered.includes('in-sample descriptions, not past-only forecasts'));
+});
+
+test('changing the coin automatically refreshes the default 2025 analysis',()=>{
+  const e=environment();
+  e.context.document.querySelectorAll=()=>[];
+  e.context.started=0;
+  e.run("loadFileMap=()=>{};runAnalysis=()=>{started++;};selectCoin('eth',true,{classList:{add(){}}});");
+  assert.equal(e.context.started,1);
 });

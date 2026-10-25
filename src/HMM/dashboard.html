@@ -103,7 +103,7 @@ select{font-size:12px;border:1px solid #d0d0c8;border-radius:6px;padding:5px 10p
 <div class="wrap">
 
   <h1>HMM Crypto Regime Detection Dashboard</h1>
-  <p class="sub">Live prices and volatility regimes from models trained on 2025 candles</p>
+  <p class="sub">2025 volatility regime comparison with optional live market analysis</p>
 
   <!-- Coin selector -->
   <div class="coin-tabs" id="coin-tabs">
@@ -116,8 +116,8 @@ select{font-size:12px;border:1px solid #d0d0c8;border-radius:6px;padding:5px 10p
     <div class="cg">
       <span class="cl">Data</span>
       <select id="mode-sel" onchange="selectDataMode()">
-        <option value="live" selected>Live market</option>
-        <option value="history">2025 analysis</option>
+        <option value="history" selected>2025 analysis</option>
+        <option value="live">Live market (optional)</option>
       </select>
     </div>
     <div class="cg">
@@ -130,7 +130,7 @@ select{font-size:12px;border:1px solid #d0d0c8;border-radius:6px;padding:5px 10p
     </div>
     <div class="cg" style="margin-left:auto">
       <span class="cl">&nbsp;</span>
-      <button class="run-btn" id="run-btn" onclick="runAnalysis()">▶ Start Live</button>
+      <button class="run-btn" id="run-btn" onclick="runAnalysis()">▶ Run 2025 Analysis</button>
     </div>
   </div>
 
@@ -323,7 +323,7 @@ function selectCoin(coin, hasData, button){
   document.getElementById('tab-bar').style.display = 'none';
   document.getElementById('status').className = 'status';
   lastData = null;
-  if(document.getElementById('mode-sel').value==='live') runAnalysis();
+  runAnalysis();
 }
 
 function selectDataMode(){
@@ -411,7 +411,7 @@ async function runAnalysis(){
   } finally {
     if(generation===liveGeneration){
       btn.disabled    = false;
-      btn.textContent = '▶ Run Analysis';
+      btn.textContent = '▶ Run 2025 Analysis';
     }
   }
 }
@@ -621,7 +621,7 @@ function comparisonData(regimeSeries){
     const priceTimes = quarter.price_timestamps || [];
     const close = quarter.close_prices || [];
     const regimeTimes = quarter.timestamps || [];
-    const forecastComparison=quarter.forecast_comparison;
+    const forecastComparison=quarter.forecast_comparison || quarter.distribution_comparison;
     assertForecastStateOrder(forecastComparison);
     const forecastPositions=new Map((forecastComparison?.timestamps || []).map((t,i)=>[t,i]));
     const modelStates = M_NAMES.map((_,m)=>quarter.models?.[String.fromCharCode(65+m)] || []);
@@ -836,7 +836,8 @@ function updateComparisonAgreement(){
   }).join('');
   const rankings=rankForecastMetrics(metrics.common);
   const rankRows=rankings.map(r=>`<tr><th scope="row">${r.name}</th><td>${r.order}</td></tr>`).join('');
-  let interpretation='Rankings need closed forecast candles shared by all three comparison models.';
+  let interpretation=live ? 'Rankings need closed forecast candles shared by all three comparison models.'
+    : 'Rankings need analysis candles shared by all three comparison models.';
   if(rankings.length){
     const winner=rankings[0].best;
     interpretation=winner.length===1 && rankings.every(r=>r.best.length===1 && r.best[0]===winner[0])
@@ -852,22 +853,22 @@ function updateComparisonAgreement(){
   el.style.display='block';
   el.innerHTML=`<div class="agreement-heading"><strong>Model agreement</strong>`+
     `<span>All four agree: ${pct(allSame,allTotal)} · ${count.format(allSame)} / ${count.format(allTotal)} candles</span></div>`+
-    `<div class="agreement-scope">${live ? 'Visible-window forecast averages · closed candles only' : 'Visible-window fitted regimes · past-only forecasts unavailable for in-sample 2025 fits'}</div>`+
+    `<div class="agreement-scope">${live ? 'Visible-window forecast averages · closed candles only' : '2025 in-sample comparison · distributions use the models fitted on each full quarter'}</div>`+
     '<div class="agreement-scroll"><table><thead><tr><th scope="col">Models</th>'+
     '<th scope="col" title="Percentage of compared candles assigned the same Low, Medium, or High regime">Same regime</th>'+
     '<th scope="col" title="Mean probability-mass intersection across aligned closed candles; higher means more similar">Mean overlap</th>'+
     '<th scope="col" title="Primary divergence: base-2 Jensen-Shannon divergence, from 0 to 1; lower means more similar">Mean JSD (bits)</th>'+
     '<th scope="col" title="Base-2 KL(A || comparison model); unbounded, lower means more similar; infinity is retained">Mean KL (bits)</th>'+
-    '<th scope="col" title="Percentage of aligned closed candles with the same most likely NEXT regime">Top-1 agreement</th>'+
-    `<th scope="col">Forecast candles</th></tr></thead><tbody>${rows}</tbody></table></div>`+
+    `<th scope="col" title="${live ? 'Aligned closed-candle forecasts' : 'In-sample fitted-model distributions'} with the same most likely next regime">Top-1 agreement</th>`+
+    `<th scope="col">${live ? 'Forecast candles' : 'Compared candles'}</th></tr></thead><tbody>${rows}</tbody></table></div>`+
     '<details class="agreement-details"><summary>More statistics, latest forecast, and rankings</summary>'+
     '<h3>Window details</h3><div class="agreement-scroll"><table><thead><tr><th>Models</th><th>High / non-High</th>'+
     `<th>Median JSD (bits)</th><th>Median KL (bits)</th><th>Infinite KL / compared</th></tr></thead><tbody>${detailRows}</tbody></table></div>`+
     (live ? `<h3>Latest next-candle forecast · ${latestLabel}</h3><div class="agreement-scroll"><table><thead><tr><th>Models</th>`+
       `<th>Overlap</th><th>JSD (bits)</th><th>KL(A || other) (bits)</th><th>Top-1</th></tr></thead><tbody>${latestRows}</tbody></table></div>` : '')+
-    `<h3>Separate rankings · ${count.format(metrics.common[0].n_compared)} shared closed candles</h3>`+
+    `<h3>Separate rankings · ${count.format(metrics.common[0].n_compared)} shared ${live ? 'closed forecast' : 'analysis'} candles</h3>`+
     (rankings.length ? `<div class="agreement-scroll"><table><thead><tr><th>Metric</th><th>Most to least similar (ties =)</th></tr></thead><tbody>${rankRows}</tbody></table></div>` : '')+
-    `<p class="agreement-interpretation">${interpretation} These measures describe agreement with A.</p></details>`;
+    `<p class="agreement-interpretation">${interpretation} These measures describe agreement with A.${live ? '' : ' The 2025 values are in-sample descriptions, not past-only forecasts or predictive accuracy.'}</p></details>`;
 }
 
 function syncComparisonControls(){

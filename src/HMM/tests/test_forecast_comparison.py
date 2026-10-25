@@ -4,7 +4,7 @@ import math
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import numpy as np
 import pandas as pd
@@ -202,6 +202,60 @@ class CausalForecastTests(unittest.TestCase):
         self.assertEqual(result["timestamps"], result["forecast_comparison"]["timestamps"])
         self.assertEqual(set(result["forecast_comparison"]["pairs"]), set("BCD"))
         json.dumps(result, allow_nan=False)
+
+
+class QuarterlyDistributionTests(unittest.TestCase):
+    def quarterly_result(self, degenerate_model=None):
+        models = []
+
+        def factory(**kwargs):
+            mid = "ABCD"[len(models)]
+            model = make_hmm()
+
+            def fit(X):
+                # Deterministic fixed parameters, with no real model training.
+                fitted = make_hmm(X.shape[1])
+                model.n_features = fitted.n_features
+                model.means_, model.covars_ = fitted.means_, fitted.covars_
+                return model
+
+            model.fit = Mock(side_effect=fit)
+            model.predict = Mock(side_effect=lambda X: np.zeros(len(X), dtype=int)
+                                 if mid == degenerate_model else np.arange(len(X)) % 3)
+            models.append(model)
+            return model
+
+        frame = candles()
+        frame["time"] -= pd.Timedelta(days=365)
+        frame["close_time"] -= 365 * 86400000
+        with patch.object(server, "load_file", return_value=frame), patch.object(server, "GaussianHMM", side_effect=factory):
+            results, series = server.run_hmm("btc", "15m", "Q1", 3)
+        self.assertEqual(len(models), 4)
+        self.assertTrue(all(m.fit.call_count == 1 for m in models))
+        return results, series
+
+    def test_quarterly_metrics_reuse_fits_and_are_explicitly_in_sample(self):
+        results, series = self.quarterly_result()
+        self.assertFalse(any("error" in r for r in results))
+        self.assertNotIn("forecast_comparison", series)
+        comparison = series["distribution_comparison"]
+        self.assertEqual(comparison["method"], "in_sample_quarter_fit")
+        self.assertFalse(comparison["is_out_of_sample"])
+        self.assertFalse(comparison["past_only_forecasts_available"])
+        self.assertEqual(comparison["timestamps"], series["timestamps"])
+        for mid in "BCD":
+            columns = comparison["pairs"][mid]
+            rows = [dict(zip(columns, values)) for values in zip(*columns.values())]
+            self.assertEqual(summarize_comparisons(rows)["n_compared"], 70)
+            self.assertTrue(all(0 <= r["jsd_bits"] <= 1 for r in rows))
+        json.dumps(series, allow_nan=False)
+
+    def test_degenerate_quarterly_fit_remains_a_gap_in_probability_metrics(self):
+        results, series = self.quarterly_result(degenerate_model="B")
+        self.assertTrue(results[1]["degenerate"])
+        self.assertTrue(all(v is None for v in series["models"]["B"]))
+        self.assertTrue(all(v is None for v in series["distribution_comparison"]["pairs"]["B"]["jsd_bits"]))
+        self.assertTrue(all(v is not None for v in series["distribution_comparison"]["pairs"]["C"]["jsd_bits"]))
 
 
 if __name__ == "__main__":
