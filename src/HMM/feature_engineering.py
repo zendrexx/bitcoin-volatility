@@ -23,6 +23,7 @@ def _base_features(df: pd.DataFrame, vol_window: int = 30) -> pd.DataFrame:
     """Compute shared derived columns in-place and return cleaned df."""
     df = df.copy()
     df["log_return"]     = np.log(df["close"] / df["close"].shift(1))
+    df["abs_log_return"] = df["log_return"].abs()
     df["high_low_range"] = (df["high"] - df["low"]) / df["close"]
     df["rolling_vol"]    = df["log_return"].rolling(vol_window).std()
     df = df.dropna().reset_index(drop=True)
@@ -30,34 +31,34 @@ def _base_features(df: pd.DataFrame, vol_window: int = 30) -> pd.DataFrame:
 
 
 def build_features_A(df: pd.DataFrame, vol_window: int = 10):
-    """Model A: Log Return + High-Low Range"""
+    """Model A: Absolute Log Return + High-Low Range"""
     df = _base_features(df, vol_window)
-    X = np.column_stack([df["log_return"], df["high_low_range"]])
+    X = np.column_stack([df["abs_log_return"], df["high_low_range"]])
     X = StandardScaler().fit_transform(X)
     return df, X
 
 
 def build_features_B(df: pd.DataFrame, vol_window: int = 10):
-    """Model B: Log Return + High-Low Range + Volume"""
+    """Model B: Absolute Log Return + High-Low Range + Volume"""
     df = _base_features(df, vol_window)
-    X = np.column_stack([df["log_return"], df["high_low_range"], df["volume"]])
+    X = np.column_stack([df["abs_log_return"], df["high_low_range"], df["volume"]])
     X = StandardScaler().fit_transform(X)
     return df, X
 
 
 def build_features_C(df: pd.DataFrame, vol_window: int = 10):
-    """Model C: Log Return + High-Low Range + Rolling Volatility"""
+    """Model C: Absolute Log Return + High-Low Range + Rolling Volatility"""
     df = _base_features(df, vol_window)
-    X = np.column_stack([df["log_return"], df["high_low_range"], df["rolling_vol"]])
+    X = np.column_stack([df["abs_log_return"], df["high_low_range"], df["rolling_vol"]])
     X = StandardScaler().fit_transform(X)
     return df, X
 
 
 def build_features_D(df: pd.DataFrame, vol_window: int = 10):
-    """Model D: Log Return + High-Low Range + Volume + Rolling Volatility"""
+    """Model D: Absolute Log Return + High-Low Range + Volume + Rolling Volatility"""
     df = _base_features(df, vol_window)
     X = np.column_stack([
-        df["log_return"],
+        df["abs_log_return"],
         df["high_low_range"],
         df["volume"],
         df["rolling_vol"],

@@ -73,12 +73,14 @@ def label_regimes(df, states: np.ndarray) -> dict:
 
     n = len(vol_means)
     if n == 2:
-        names = ["Low Vol", "High Vol"]
+        names = ["Low volatility", "High volatility"]
     elif n == 3:
-        names = ["Low (Bull)", "Medium (Sideways)", "High (Bear)"]
+        names = ["Low volatility", "Medium volatility", "High volatility"]
     else:
         names = [f"Regime {i}" for i in range(n)]
 
     state_map = {state: names[i] for i, state in enumerate(vol_means.index)}
     df["regime"] = df["state"].map(state_map)
     return df, state_map
+
+
