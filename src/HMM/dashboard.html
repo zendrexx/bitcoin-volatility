@@ -96,6 +96,15 @@ select{font-size:12px;border:1px solid #d0d0c8;border-radius:6px;padding:5px 10p
 .agreement-details summary{cursor:pointer;font-size:10px;color:#555}
 .agreement-details h3{font-size:11px;font-weight:600;margin:10px 0 3px}
 .metric-sub{display:block;font-size:10px;color:#777}
+.characteristics-scroll{overflow-x:auto}
+.characteristics-table{width:100%;border-collapse:collapse;font-size:11px;font-variant-numeric:tabular-nums}
+.characteristics-table th,.characteristics-table td{padding:8px 10px;border-bottom:1px solid #e5e5dc;text-align:left}
+.characteristics-table thead th{color:#666;font-weight:500;white-space:nowrap}
+.characteristics-table thead th:nth-last-child(-n+2){text-align:right}
+.characteristics-table td:nth-last-child(-n+2){text-align:right}
+.characteristics-table th.model-cell{vertical-align:top;font-weight:600;white-space:nowrap}
+.characteristics-table tr.model-start>th,.characteristics-table tr.model-start>td{border-top:1px solid #d0d0c8}
+.characteristics-regime{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
 @media(max-width:600px){.forecast-states{grid-template-columns:1fr}}
 
 </style>
@@ -144,6 +153,7 @@ select{font-size:12px;border:1px solid #d0d0c8;border-radius:6px;padding:5px 10p
   <!-- Chart tabs -->
   <div id="tab-bar" class="tabs" style="display:none">
     <button class="tab active" id="tab-regimes" onclick="showTab('regimes',this)">Regime Comparison</button>
+    <button class="tab" id="tab-characteristics" onclick="showTab('characteristics',this)">Regime Characteristics</button>
     <button class="tab" id="tab-ll" onclick="showTab('ll',this)">Log-Likelihood</button>
   </div>
 
@@ -162,6 +172,10 @@ select{font-size:12px;border:1px solid #d0d0c8;border-radius:6px;padding:5px 10p
           <option value="30" selected>30 days</option>
           <option value="90">90 days</option>
           <option value="180">180 days</option>
+          <option value="Q1">Q1</option>
+          <option value="Q2">Q2</option>
+          <option value="Q3">Q3</option>
+          <option value="Q4">Q4</option>
           <option value="all">Full year</option>
           <option value="custom" hidden>Custom</option>
         </select>
@@ -181,6 +195,20 @@ select{font-size:12px;border:1px solid #d0d0c8;border-radius:6px;padding:5px 10p
       <div class="card-title">Model D <span class="model-feature" id="feature-d"></span></div>
       <div class="forecast" id="forecast-d"></div>
       <div class="ch-comparison"><canvas id="comparison-d"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Regime characteristics -->
+  <div id="panel-characteristics" class="panel">
+    <div class="card">
+      <div class="card-title" id="characteristics-title">2025 Regime Characteristics</div>
+      <div class="characteristics-scroll">
+        <table class="characteristics-table">
+          <thead><tr><th scope="col">Model</th><th scope="col">Regime</th>
+            <th scope="col">Mean rolling volatility</th><th scope="col">State proportion</th></tr></thead>
+          <tbody id="characteristics-body"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -586,6 +614,44 @@ function extractSeries(results, metric){
   );
 }
 
+function characteristicRows(results, period='all'){
+  return M_NAMES.flatMap(model=>{
+    const fits=results.filter(result=>result.model===model && !result.error &&
+      Array.isArray(result.regime_characteristics) &&
+      (period==='all' || result.quarter===period));
+    const totalCandles=fits.reduce((sum,fit)=>sum+fit.n_obs,0);
+    return REGIME_NAMES.map(regime=>{
+      const profiles=fits.map(fit=>fit.regime_characteristics.find(profile=>profile.regime===regime))
+        .filter(Boolean);
+      const stateCandles=profiles.reduce((sum,profile)=>sum+profile.n_candles,0);
+      const meanRollingVol=stateCandles
+        ? profiles.reduce((sum,profile)=>sum+profile.mean_rolling_vol*profile.n_candles,0)/stateCandles
+        : null;
+      return {model,regime,meanRollingVol,
+        stateProportion:totalCandles ? stateCandles/totalCandles : null};
+    });
+  });
+}
+
+function renderRegimeCharacteristics(data){
+  if(!data || data.live) return;
+  const selectedWindow=document.getElementById('view-window').value;
+  const period=QUARTERS.includes(selectedWindow) ? selectedWindow : 'all';
+  const rows=characteristicRows(data.results || [],period);
+  document.getElementById('characteristics-title').textContent=
+    `${data.coin} / USDT · ${data.tf} · ${period==='all' ? '2025' : period+' 2025'} Regime Characteristics`;
+  document.getElementById('characteristics-body').innerHTML=rows.map((row,index)=>{
+    const tier=index%REGIME_NAMES.length;
+    const modelCell=tier===0 ? `<th class="model-cell" scope="row" rowspan="3">${row.model}</th>` : '';
+    const mean=row.meanRollingVol===null ? '—' : `${(100*row.meanRollingVol).toFixed(4)}%`;
+    const proportion=row.stateProportion===null ? '—' : `${(100*row.stateProportion).toFixed(1)}%`;
+    return `<tr class="${tier===0 ? 'model-start' : ''}">${modelCell}`+
+      `<th scope="row"><span class="characteristics-regime"><span class="regime-swatch" `+
+      `style="background:${REGIME_COLORS[tier]}"></span>${row.regime}</span></th>`+
+      `<td>${mean}</td><td>${proportion}</td></tr>`;
+  }).join('');
+}
+
 // ── Chart builders ────────────────────────────────────────────────────────────
 function quarterMarkerPlugin(regimeSeries){
   const starts = QUARTERS.slice(1).map(q=>regimeSeries?.[q]?.price_timestamps?.[0])
@@ -889,13 +955,22 @@ function setComparisonView(start, span){
 function changeComparisonWindow(value){
   if(value==='custom' || !comparisonView.key) return;
   const view=comparisonView;
+  if(QUARTERS.includes(value)){
+    const quarter=view.quarterWindows?.[value];
+    if(quarter) setComparisonView(quarter.start,quarter.end-quarter.start);
+    return;
+  }
   const span=value==='all' ? view.domainEnd-view.domainStart : Number(value)*DAY_MS;
   const center=view.start+view.span/2;
   setComparisonView(view.mode==='live' && view.follow ? view.domainEnd-span : center-span/2,span);
 }
 
 function slideComparison(value){
-  if(comparisonView.key) setComparisonView(Number(value),comparisonView.span);
+  if(comparisonView.key){
+    if(QUARTERS.includes(document.getElementById('view-window').value))
+      document.getElementById('view-window').value='custom';
+    setComparisonView(Number(value),comparisonView.span);
+  }
 }
 
 function attachComparisonPan(canvas, chart){
@@ -909,7 +984,11 @@ function attachComparisonPan(canvas, chart){
   canvas.onpointermove=event=>{
     if(!drag) return;
     const width=chart.chartArea.right-chart.chartArea.left;
-    if(width>0) setComparisonView(drag.start-(event.clientX-drag.x)*drag.span/width,drag.span);
+    if(width>0){
+      if(QUARTERS.includes(document.getElementById('view-window').value))
+        document.getElementById('view-window').value='custom';
+      setComparisonView(drag.start-(event.clientX-drag.x)*drag.span/width,drag.span);
+    }
   };
   const endDrag=event=>{
     drag=null;
@@ -968,7 +1047,8 @@ function buildComparisonCharts(regimeSeries, coin, timeframe, mode='history'){
     document.getElementById('forecast-'+String.fromCharCode(97+m)).style.display=
       mode==='live'?'block':'none';
   for(const option of document.getElementById('view-window').options)
-    option.disabled = mode==='live' && ['90','180','all'].includes(option.value);
+    option.disabled = mode==='live' && ['90','180','all'].includes(option.value) ||
+      QUARTERS.includes(option.value) && (mode==='live' || !regimeSeries?.[option.value]?.price_timestamps?.length);
   const {times, prices, states, probabilityRows, forecastClosed} = comparisonData(regimeSeries);
   if(!prices.length) return;
   const decimals = coin.toLowerCase() === 'doge' ? 4 : 2;
@@ -1001,6 +1081,10 @@ function buildComparisonCharts(regimeSeries, coin, timeframe, mode='history'){
   view.forecastClosed=forecastClosed;
   view.domainStart=times[0];
   view.domainEnd=times[times.length-1];
+  view.quarterWindows=Object.fromEntries(QUARTERS.flatMap(q=>{
+    const quarterTimes=regimeSeries?.[q]?.price_timestamps || [];
+    return quarterTimes.length ? [[q,{start:quarterTimes[0],end:quarterTimes[quarterTimes.length-1]}]] : [];
+  }));
   view.fullLow=minPrice;
   view.fullHigh=maxPrice;
   view.timeframeMs=timeframeMs;
@@ -1132,6 +1216,9 @@ function renderAll(d){
 
   if(document.getElementById('panel-regimes').classList.contains('active')){
     buildComparisonCharts(d.regime_series || {}, d.coin || activeCoin.toUpperCase(), d.tf || document.getElementById('tf-sel').value);
+  }
+  if(document.getElementById('panel-characteristics').classList.contains('active')){
+    renderRegimeCharacteristics(d);
   }
 
   const llSeries = extractSeries(results, 'log_likelihood');

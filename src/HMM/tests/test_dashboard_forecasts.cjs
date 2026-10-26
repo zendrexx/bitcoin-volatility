@@ -20,6 +20,54 @@ const identical={overlap_percent:100,jsd_bits:0,kl_bits:0,top1_agreement:1};
 const disjoint={overlap_percent:0,jsd_bits:1,kl_bits:'Infinity',top1_agreement:0};
 const close={overlap_percent:80,jsd_bits:0.1,kl_bits:0.3,top1_agreement:1};
 
+test('regime characteristics pool quarterly means by state candles and keep log-likelihood last',()=>{
+  assert(html.indexOf('id="tab-regimes"')<html.indexOf('id="tab-characteristics"'));
+  assert(html.indexOf('id="tab-characteristics"')<html.indexOf('id="tab-ll"'));
+  assert(html.indexOf('id="characteristics-body"')<html.indexOf('id="ll-chart"'));
+  const e=environment();
+  const makeFit=(quarter,counts,means)=>({model:'Model A',quarter,n_obs:100,
+    regime_characteristics:counts.map((n_candles,i)=>({
+      regime:['Low volatility','Medium volatility','High volatility'][i],
+      n_candles,mean_rolling_vol:means[i],proportion:n_candles/100,
+    }))});
+  e.context.fixture={coin:'BTC',tf:'15m',results:[
+    makeFit('Q1',[90,8,2],[0.001,0.002,0.003]),
+    makeFit('Q2',[10,45,45],[0.005,0.006,0.007]),
+    {model:'Model A',quarter:'Q3',error:'degenerate fit'},
+  ]};
+  const pooled=e.run("characteristicRows(fixture.results,'all')");
+  assert(Math.abs(pooled[0].meanRollingVol-0.0014)<1e-12);
+  assert.equal(pooled[0].stateProportion,0.5);
+  assert.equal(pooled[3].meanRollingVol,null);
+  e.elements['view-window'].value='all';
+  e.run('renderRegimeCharacteristics(fixture)');
+  assert(e.elements['characteristics-body'].innerHTML.includes('0.1400%'));
+  assert(e.elements['characteristics-body'].innerHTML.includes('50.0%'));
+  assert(e.elements['characteristics-body'].innerHTML.includes('—'));
+  e.elements['view-window'].value='Q1';
+  e.run('renderRegimeCharacteristics(fixture)');
+  assert(e.elements['characteristics-body'].innerHTML.includes('90.0%'));
+  e.elements['view-window'].value='Q2';
+  e.run('renderRegimeCharacteristics(fixture)');
+  assert(e.elements['characteristics-body'].innerHTML.includes('10.0%'));
+});
+
+test('visible window quarter choices jump to actual quarter candle bounds',()=>{
+  const dropdown=html.match(/<select id="view-window"[\s\S]*?<\/select>/)[0];
+  for(const q of ['Q1','Q2','Q3','Q4']) assert(dropdown.includes(`<option value="${q}">${q}</option>`));
+  const e=environment();
+  const start=Date.UTC(2025,3,1),end=Date.UTC(2025,6,1)-900000;
+  e.context.requestAnimationFrame=()=>1;
+  e.context.fixture={key:'BTC:15m:history',mode:'history',frame:null,
+    domainStart:Date.UTC(2025,0,1),domainEnd:Date.UTC(2026,0,1)-900000,
+    start:Date.UTC(2025,0,1),span:30*86400000,timeframeMs:900000,
+    quarterWindows:{Q2:{start,end}}};
+  e.run("comparisonView=fixture;changeComparisonWindow('Q2');");
+  assert.equal(e.run('comparisonView.start'),start);
+  assert.equal(e.run('comparisonView.span'),end-start);
+  assert(e.elements['timeline-range'].textContent.includes('UTC'));
+});
+
 test('closed-window metrics exclude open candles and retain pairwise coverage',()=>{
   const e=environment();
   e.context.view={times:[0,1,2,3],start:0,span:3,forecastClosed:[true,true,false,true],
@@ -106,6 +154,7 @@ test('four price charts build and keep forecast metrics aligned through live/his
   }
   e.context.cancelAnimationFrame=()=>{};
   e.context.Chart=class{constructor(ctx,config){Object.assign(this,config);}destroy(){}update(){}};
+  e.elements['view-window'].options=[{value:'Q1'},{value:'Q2'}];
   const times=[0,1,2,3].map(i=>Date.UTC(2026,0,10)+i*900000);
   const column={overlap_percent:[100,100,100,100],jsd_bits:[0,0,0,0],kl_bits:[0,0,0,0],top1_agreement:[1,1,1,1]};
   const history={price_timestamps:times,close_prices:[100,101,100,102],timestamps:times,models:{A:[0,1,0,2],B:[0,1,0,2],C:[0,1,0,2],D:[0,1,0,2]}};
@@ -114,10 +163,14 @@ test('four price charts build and keep forecast metrics aligned through live/his
   e.run("buildComparisonCharts(input,'BTC','15m','live');");
   assert.equal(e.run('Object.keys(charts).length'),4);
   assert.equal(e.run('windowForecastMetrics(comparisonView).common[0].n_compared'),3);
+  assert.equal(e.elements['view-window'].options[0].disabled,true);
   e.context.input={Q1:history};
   e.run("buildComparisonCharts(input,'BTC','15m','history');");
   assert.equal(e.run('Object.keys(charts).length'),4);
   assert.equal(e.run('windowForecastMetrics(comparisonView).pairs[0].n_compared'),0);
+  assert.equal(e.elements['view-window'].options[0].disabled,false);
+  assert.equal(e.elements['view-window'].options[1].disabled,true);
+  assert.equal(e.run('comparisonView.quarterWindows.Q1.start'),times[0]);
   assert(e.elements['comparison-agreement'].innerHTML.includes('2025 in-sample comparison'));
 });
 

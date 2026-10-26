@@ -237,6 +237,15 @@ class QuarterlyDistributionTests(unittest.TestCase):
     def test_quarterly_metrics_reuse_fits_and_are_explicitly_in_sample(self):
         results, series = self.quarterly_result()
         self.assertFalse(any("error" in r for r in results))
+        for result in results:
+            profiles = result["regime_characteristics"]
+            self.assertEqual([p["regime"] for p in profiles], STATE_ORDER)
+            self.assertEqual(sum(p["n_candles"] for p in profiles), result["n_obs"])
+            self.assertAlmostEqual(sum(p["proportion"] for p in profiles), 1)
+            self.assertEqual(
+                [p["n_candles"] for p in profiles],
+                [series["models"][result["model"][-1]].count(tier) for tier in range(3)],
+            )
         self.assertNotIn("forecast_comparison", series)
         comparison = series["distribution_comparison"]
         self.assertEqual(comparison["method"], "in_sample_quarter_fit")

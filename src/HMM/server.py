@@ -187,13 +187,23 @@ def run_hmm(coin: str, tf: str, quarter: str, n_states: int) -> tuple[list[dict]
             # Regime labels ordered by mean rolling vol
             df_tmp = df.copy()
             df_tmp["state"] = states
-            vol_order = df_tmp.groupby("state")["rolling_vol"].mean().sort_values().index.tolist()
+            mean_volatility = df_tmp.groupby("state")["rolling_vol"].mean().sort_values()
+            vol_order = mean_volatility.index.tolist()
             n = len(vol_order)
             if n == 2:   names = ["Low volatility","High volatility"]
             elif n == 3: names = ["Low volatility","Medium volatility","High volatility"]
             else:        names = [f"Regime {i}" for i in range(n)]
             state_map = {s: names[i] for i,s in enumerate(vol_order)}
             regime_order = {state: tier for tier, state in enumerate(vol_order)}
+            regime_characteristics = [
+                {
+                    "regime": names[tier],
+                    "mean_rolling_vol": float(mean_volatility.loc[state]),
+                    "n_candles": int(np.count_nonzero(states == state)),
+                    "proportion": float(occupancy[state]),
+                }
+                for tier, state in enumerate(vol_order)
+            ]
             regime_series["models"][model_id] = [
                 int(regime_order[int(state)]) for state in states
             ]
@@ -213,6 +223,7 @@ def run_hmm(coin: str, tf: str, quarter: str, n_states: int) -> tuple[list[dict]
                 "n_states":    n_states,
                 **metrics,
                 "state_map":   {str(k): v for k,v in state_map.items()},
+                "regime_characteristics": regime_characteristics,
                 "transitions": hmm.transmat_.round(4).tolist(),
                 "means":       hmm.means_.round(6).tolist(),
             })
