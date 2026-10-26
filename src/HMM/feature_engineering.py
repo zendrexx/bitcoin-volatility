@@ -5,7 +5,7 @@ from sklearn.preprocessing import StandardScaler
 
 
 EXCLUDED_WINDOWS = [
-    ("2025-10-10 20:00:00", "2025-10-11 04:00:00"),  # liquidation cascade; collapses hidden states under full covariance
+    ("2025-10-10 20:00:00", "2025-10-11 04:00:00"),  #liquidation cascade, random drop tas bumalik din, hindi makita ng model
 ]
 
 
@@ -67,7 +67,7 @@ def build_features_D(df: pd.DataFrame, vol_window: int = 10):
     return df, X
 
 
-# Convenience map used by the rolling window runner
+#map
 MODEL_BUILDERS = {
     "A": build_features_A,
     "B": build_features_B,

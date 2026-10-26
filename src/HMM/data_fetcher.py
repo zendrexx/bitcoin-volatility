@@ -26,7 +26,7 @@ QUARTERS = {
     "Q4": (datetime(YEAR, 10, 1), datetime(YEAR, 12, 31, 23, 59, 59)),
 }
 
-
+#get the desired data "2025 january to 2025 december" 
 def get_klines(symbol: str, interval: str, start_time: datetime,
                end_time: datetime, retries: int = 3) -> list:
     all_data = []
@@ -71,7 +71,7 @@ def save_json(data: list, filepath: str) -> None:
     with open(filepath, "w") as f:
         json.dump(data, f, indent=4)
 
-
+#main fetching, calls klines
 def fetch_coin(coin: str):
     coin = coin.lower()
     if coin not in COIN_MAP:
