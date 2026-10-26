@@ -20,7 +20,7 @@ const identical={overlap_percent:100,jsd_bits:0,kl_bits:0,top1_agreement:1};
 const disjoint={overlap_percent:0,jsd_bits:1,kl_bits:'Infinity',top1_agreement:0};
 const close={overlap_percent:80,jsd_bits:0.1,kl_bits:0.3,top1_agreement:1};
 
-test('closed-window metrics exclude open candles and use shared timestamps for rankings',()=>{
+test('closed-window metrics exclude open candles and retain pairwise coverage',()=>{
   const e=environment();
   e.context.view={times:[0,1,2,3],start:0,span:3,forecastClosed:[true,true,false,true],
     probabilityRows:[[identical,disjoint,close,close],[identical,null,close,disjoint],[identical,identical,close,identical]]};
@@ -48,16 +48,6 @@ test('frontend means and medians match Python including infinite KL',()=>{
   assert.throws(()=>e.run('summarizeForecastMetrics(rows)'),/Invalid/);
 });
 
-test('rankings remain separate and retain ties and disagreement',()=>{
-  const e=environment();
-  e.context.common=[
-    {n_compared:10,mean_overlap_percent:95,mean_jsd_bits:0.05,mean_kl_bits:10,top1_agreement_percent:80},
-    {n_compared:10,mean_overlap_percent:90,mean_jsd_bits:0.1,mean_kl_bits:0.2,top1_agreement_percent:90},
-    {n_compared:10,mean_overlap_percent:95,mean_jsd_bits:0.2,mean_kl_bits:0.5,top1_agreement_percent:90}];
-  const result=e.run('rankForecastMetrics(common)');
-  assert.deepEqual(Array.from(result,r=>r.order),['B = D > C','B > C > D','C > D > B','C = D > B']);
-});
-
 test('probabilities align by candle timestamps, with an explicit common state order',()=>{
   const e=environment();
   const columns={overlap_percent:[100,0],jsd_bits:[0,1],kl_bits:[0,'Infinity'],top1_agreement:[1,0]};
@@ -75,7 +65,7 @@ test('probabilities align by candle timestamps, with an explicit common state or
   assert.throws(()=>e.run('comparisonData(input)'),/Low, Medium, High/);
 });
 
-test('latest provisional metrics are distinct from window means, with explicit infinite counts',()=>{
+test('latest provisional metrics are distinct from window means',()=>{
   const e=environment();
   e.context.fixture={times:[0,1,2],states:[[0,0,0],[0,1,0],[0,0,1],[0,0,0]],start:0,span:2,mode:'live',
     forecastClosed:[true,true,false],probabilityRows:[[identical,disjoint,close],[identical,identical,close],[close,close,disjoint]]};
@@ -85,10 +75,11 @@ test('latest provisional metrics are distinct from window means, with explicit i
   e.run("comparisonView=fixture;updateForecastCards(forecasts,'15m');");
   const rendered=e.elements['comparison-agreement'].innerHTML;
   assert(rendered.includes('Mean JSD (bits)')&&rendered.includes('Mean KL (bits)'));
-  assert(rendered.includes('50.0%')&&rendered.includes('1 / 2')&&rendered.includes('&infin;'));
+  assert(rendered.includes('50.0%')&&rendered.includes('2 / 3')&&rendered.includes('&infin;'));
   assert(rendered.includes('Latest next-candle forecast')&&rendered.includes('open candle'));
   assert(rendered.includes('80.0%'));
-  assert.equal((rendered.match(/<th scope="row">A\u2013B<\/th>/g)||[]).length,3);
+  assert.equal((rendered.match(/<th scope="row">A\u2013B<\/th>/g)||[]).length,2);
+  assert(!/Window details|Median JSD|Median KL|Infinite KL \/ compared|High \/ non-High|rankings|Most to least similar/.test(rendered));
   assert(!rendered.includes('<th scope="row">B\u2013C</th>'));
   const before=e.run('windowForecastMetrics(comparisonView).pairs[0].mean_overlap_percent');
   e.context.forecasts.B.comparison_with_A=disjoint;
@@ -101,6 +92,7 @@ test('2025 in-sample comparisons are labeled separately from live forecasts',()=
   e.run("comparisonView={times:[0],states:[[0],[0],[1],[2]],start:0,span:1,mode:'history'};updateComparisonAgreement();");
   const rendered=e.elements['comparison-agreement'].innerHTML;
   assert(rendered.includes('2025 in-sample comparison'));
+  assert(!/Window details|Median JSD|Median KL|Infinite KL \/ compared|High \/ non-High|rankings|Most to least similar/.test(rendered));
   assert(!rendered.includes('Latest next-candle forecast'));
   assert(rendered.includes('100.0%')&&rendered.includes('Compared candles'));
   assert(!rendered.includes('Forecast candles'));

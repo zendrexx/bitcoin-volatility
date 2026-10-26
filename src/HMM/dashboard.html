@@ -90,11 +90,12 @@ select{font-size:12px;border:1px solid #d0d0c8;border-radius:6px;padding:5px 10p
 .agreement th:first-child{padding-left:0;text-align:left;color:#333}
 .agreement th:last-child,.agreement td:last-child{padding-right:0}
 .agreement tbody tr:last-child th,.agreement tbody tr:last-child td{border-bottom:0}
+.agreement [title]{cursor:help}
+.agreement thead th[title]{text-decoration:underline dotted;text-underline-offset:3px}
 .agreement-details{margin-top:8px}
 .agreement-details summary{cursor:pointer;font-size:10px;color:#555}
 .agreement-details h3{font-size:11px;font-weight:600;margin:10px 0 3px}
 .metric-sub{display:block;font-size:10px;color:#777}
-.agreement-interpretation{font-size:10px;color:#666;white-space:normal;margin-top:7px}
 @media(max-width:600px){.forecast-states{grid-template-columns:1fr}}
 
 </style>
@@ -780,24 +781,6 @@ function windowForecastMetrics(view){
   return {pairs:rows.map(summarizeForecastMetrics),common:common.map(summarizeForecastMetrics)};
 }
 
-function rankForecastMetrics(common){
-  if(common.some(s=>!s.n_compared)) return [];
-  const definitions=[['Mean overlap','mean_overlap_percent',-1],['Mean JSD (primary)','mean_jsd_bits',1],
-    ['Mean KL(A || other)','mean_kl_bits',1],['Top-1 agreement','top1_agreement_percent',-1]];
-  return definitions.map(([name,key,direction])=>{
-    const sorted=common.map((s,i)=>({model:String.fromCharCode(66+i),value:s[key]}))
-      .sort((a,b)=>a.value===b.value ? (a.model<b.model ? -1 : 1) : direction*(a.value-b.value));
-    const groups=[];
-    for(const row of sorted){
-      const last=groups[groups.length-1];
-      if(last && (row.value===last[0].value || Math.abs(row.value-last[0].value)<1e-10)) last.push(row);
-      else groups.push([row]);
-    }
-    return {name,key,groups,best:groups[0].map(r=>r.model),
-      order:groups.map(g=>g.map(r=>r.model).join(' = ')).join(' > ')};
-  });
-}
-
 function updateComparisonAgreement(){
   const {times=[],states=[],start=0,span=0,mode,forecasts}=comparisonView;
   const el=document.getElementById('comparison-agreement');
@@ -808,6 +791,17 @@ function updateComparisonAgreement(){
   const metrics=windowForecastMetrics(comparisonView);
   const number=value=>value==null ? '—' : value===Infinity || value==='Infinity' ? '&infin;' : value.toFixed(4);
   const percentage=value=>value==null ? '—' : value.toFixed(1)+'%';
+  const help={
+    models:'Each row compares an independently fitted model with baseline A. Probabilities are aligned as Low, Medium, High.',
+    same:'Higher = more agreement with A on the current Low, Medium, or High regime. Counts below show agreeing candles / compared candles. This is not accuracy.',
+    overlap:'Higher = more agreement with A. Shared next-state probability mass: 100% means identical distributions; 0% means no shared mass.',
+    jsd:'Lower = more agreement with A. Jensen-Shannon divergence is symmetric: 0 bits means identical distributions; 1 bit is the maximum difference.',
+    kl:'Lower = more agreement with A. Directional KL(A || other): 0 bits means identical distributions. There is no upper limit; it can be infinite if the other model assigns zero probability to a state A considers possible.',
+    top1:'Higher = more agreement with A on the most likely next Low, Medium, or High regime. 100% means the same top choice every time. This is not prediction accuracy.',
+    count:live ? 'Number of valid, matching closed-candle forecast origins in the visible window. Open candles are excluded. This measures coverage, not model quality.'
+      : 'Number of valid, matching candles in the visible window used for the probability comparisons. Equal counts across pairs are expected when their data coverage matches. This is not the number of agreeing predictions.',
+  };
+  const header=(label,key)=>`<th scope="col" title="${help[key]}">${label}</th>`;
   const latest=pair=>{
     const other=forecasts?.[String.fromCharCode(66+pair)],base=forecasts?.A;
     return live && base && other && base.origin_time===other.origin_time && base.target_time===other.target_time
@@ -822,53 +816,29 @@ function updateComparisonAgreement(){
       `<td>${number(summary.mean_kl_bits)}</td><td>${percentage(summary.top1_agreement_percent)}</td>`+
       `<td>${count.format(summary.n_compared)}</td></tr>`;
   }).join('');
-  const detailRows=pairs.map((pair,index)=>{
-    const summary=metrics.pairs[index];
-    return `<tr><th scope="row">A–${String.fromCharCode(66+index)}</th><td>${pct(pair.highSame,pair.total)}</td>`+
-      `<td>${number(summary.median_jsd_bits)}</td><td>${number(summary.median_kl_bits)}</td>`+
-      `<td>${summary.infinite_kl_count} / ${summary.n_compared}</td></tr>`;
-  }).join('');
   const latestRows=pairs.map((_,index)=>{
     const row=latest(index);
     return `<tr><th scope="row">A–${String.fromCharCode(66+index)}</th><td>${percentage(row?.overlap_percent)}</td>`+
       `<td>${number(row?.jsd_bits)}</td><td>${number(row?.kl_bits)}</td>`+
       `<td>${row?.top1_agreement==null ? '—' : row.top1_agreement ? 'Same' : 'Different'}</td></tr>`;
   }).join('');
-  const rankings=rankForecastMetrics(metrics.common);
-  const rankRows=rankings.map(r=>`<tr><th scope="row">${r.name}</th><td>${r.order}</td></tr>`).join('');
-  let interpretation=live ? 'Rankings need closed forecast candles shared by all three comparison models.'
-    : 'Rankings need analysis candles shared by all three comparison models.';
-  if(rankings.length){
-    const winner=rankings[0].best;
-    interpretation=winner.length===1 && rankings.every(r=>r.best.length===1 && r.best[0]===winner[0])
-      ? `Model ${winner[0]} is closest to A across all four window metrics.`
-      : `No unique winner across all four metrics. JSD (primary) favors ${rankings[1].best.join(' and ')}.`;
-    if(new Set(rankings.slice(0,3).map(r=>r.order)).size>1)
-      interpretation+=' Rankings differ: overlap measures shared mass; JSD balances both distributions; directional KL penalizes low probabilities for states A favors.';
-  }
   const date=forecasts?.A?.origin_time;
   const latestLabel=Number.isFinite(date) ? new Intl.DateTimeFormat('en-US',{
     month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'UTC',timeZoneName:'short'
   }).format(new Date(date))+(forecasts.A.provisional ? ' · open candle' : ' · closed candle') : 'unavailable';
   el.style.display='block';
   el.innerHTML=`<div class="agreement-heading"><strong>Model agreement</strong>`+
-    `<span>All four agree: ${pct(allSame,allTotal)} · ${count.format(allSame)} / ${count.format(allTotal)} candles</span></div>`+
-    `<div class="agreement-scope">${live ? 'Visible-window forecast averages · closed candles only' : '2025 in-sample comparison · distributions use the models fitted on each full quarter'}</div>`+
-    '<div class="agreement-scroll"><table><thead><tr><th scope="col">Models</th>'+
-    '<th scope="col" title="Percentage of compared candles assigned the same Low, Medium, or High regime">Same regime</th>'+
-    '<th scope="col" title="Mean probability-mass intersection across aligned closed candles; higher means more similar">Mean overlap</th>'+
-    '<th scope="col" title="Primary divergence: base-2 Jensen-Shannon divergence, from 0 to 1; lower means more similar">Mean JSD (bits)</th>'+
-    '<th scope="col" title="Base-2 KL(A || comparison model); unbounded, lower means more similar; infinity is retained">Mean KL (bits)</th>'+
-    `<th scope="col" title="${live ? 'Aligned closed-candle forecasts' : 'In-sample fitted-model distributions'} with the same most likely next regime">Top-1 agreement</th>`+
-    `<th scope="col">${live ? 'Forecast candles' : 'Compared candles'}</th></tr></thead><tbody>${rows}</tbody></table></div>`+
-    '<details class="agreement-details"><summary>More statistics, latest forecast, and rankings</summary>'+
-    '<h3>Window details</h3><div class="agreement-scroll"><table><thead><tr><th>Models</th><th>High / non-High</th>'+
-    `<th>Median JSD (bits)</th><th>Median KL (bits)</th><th>Infinite KL / compared</th></tr></thead><tbody>${detailRows}</tbody></table></div>`+
-    (live ? `<h3>Latest next-candle forecast · ${latestLabel}</h3><div class="agreement-scroll"><table><thead><tr><th>Models</th>`+
-      `<th>Overlap</th><th>JSD (bits)</th><th>KL(A || other) (bits)</th><th>Top-1</th></tr></thead><tbody>${latestRows}</tbody></table></div>` : '')+
-    `<h3>Separate rankings · ${count.format(metrics.common[0].n_compared)} shared ${live ? 'closed forecast' : 'analysis'} candles</h3>`+
-    (rankings.length ? `<div class="agreement-scroll"><table><thead><tr><th>Metric</th><th>Most to least similar (ties =)</th></tr></thead><tbody>${rankRows}</tbody></table></div>` : '')+
-    `<p class="agreement-interpretation">${interpretation} These measures describe agreement with A.${live ? '' : ' The 2025 values are in-sample descriptions, not past-only forecasts or predictive accuracy.'}</p></details>`;
+    `<span title="Higher = more agreement among all four models on the current regime. Counts show candles where all four agree / candles where all four have valid states. This is not accuracy.">All four agree: ${pct(allSame,allTotal)} · ${count.format(allSame)} / ${count.format(allTotal)} candles</span></div>`+
+    `<div class="agreement-scope" title="${live ? 'The means compare next-state forecasts from closed candles in the visible window. Latest open-candle estimates appear separately below.' : 'The 2025 values describe models fitted on each full quarter. They are in-sample descriptions, not past-only forecasts or predictive accuracy.'}">${live ? 'Visible-window forecast averages · closed candles only' : '2025 in-sample comparison · distributions use the models fitted on each full quarter'}</div>`+
+    '<div class="agreement-scroll"><table><thead><tr>'+header('Models','models')+
+    header('Same regime','same')+header('Mean overlap','overlap')+header('Mean JSD (bits)','jsd')+
+    header('Mean KL (bits)','kl')+header('Top-1 agreement','top1')+
+    header(live ? 'Forecast candles' : 'Compared candles','count')+`</tr></thead><tbody>${rows}</tbody></table></div>`+
+    (live ? `<details class="agreement-details"><summary>Latest forecast</summary>`+
+      `<h3>Latest next-candle forecast · ${latestLabel}</h3><div class="agreement-scroll"><table><thead><tr>`+
+      header('Models','models')+header('Overlap','overlap')+header('JSD (bits)','jsd')+header('KL(A || other) (bits)','kl')+
+      `<th scope="col" title="Same means both models select the same most likely next regime; Different means their top choices differ. This is not prediction accuracy.">Top-1</th>`+
+      `</tr></thead><tbody>${latestRows}</tbody></table></div></details>` : '');
 }
 
 function syncComparisonControls(){

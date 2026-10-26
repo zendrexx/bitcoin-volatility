@@ -20,7 +20,7 @@ We developed a cryptocurrency volatility-regime analysis system using three-stat
 | F | Regime labeling and state characteristics | Interpretable Low/Medium/High labels and numerical profiles. |
 | G | Historical 2025 analysis | Independent quarterly fits and descriptive comparisons across the year. |
 | H | Saved models and optional live inference | Reusable annual models, current-state probabilities, and next-state probabilities. |
-| I | Model comparison and ranking | Agreement, overlap, JSD, directional KL, Top-1 agreement, and comparison counts. |
+| I | Model comparison | Agreement, overlap, JSD, directional KL, Top-1 agreement, and comparison counts. |
 | J | Dashboard presentation | Four synchronized price charts, comparison tables, and the log-likelihood view. |
 | K | Validation, limitations, and interpretation | Evidence that calculations work and boundaries on the thesis claims. |
 
@@ -312,7 +312,6 @@ The dashboard treats A as the baseline and shows **A-B, A-C, and A-D**. The mode
 | Same regime | Percentage of valid aligned candles with exactly the same Low, Medium, or High assignment. |
 | Agreeing / compared counts | Actual matching-state count divided by the valid comparison count. Equal denominators across pairs are expected when they share the same complete timestamps. |
 | All four agree | Percentage and count of candles where A, B, C, and D all assign the same regime, using only candles where all four have valid states. |
-| High / non-High | Percentage where both models agree on High versus Low-or-Medium. Low versus Medium counts as agreement under this coarser comparison. |
 
 The calculations use the full state series within the visible date window, independently of chart downsampling. Missing or failed assignments are omitted from valid comparison counts, rather than counted as matches.
 
@@ -333,15 +332,15 @@ Inputs must be finite, nonnegative vectors with positive mass and are normalized
 
 If A assigns positive probability to a state and another model assigns zero, KL is **infinite**. A term with zero probability under A contributes zero. We apply no epsilon smoothing to replace these zeros. Infinite values remain in mean and median calculations, their counts are reported, and the dashboard displays an infinity symbol. JSON uses the string `"Infinity"` to preserve a valid response. Only insignificant floating-point divergence errors are adjusted within the documented numerical tolerance.
 
-### 14.3 Window summaries and rankings
+### 14.3 Window summaries and interpretation
 
-The table reports mean overlap, mean JSD, mean KL, Top-1 agreement, and the number of comparison origins. Expanded details include median JSD, median KL, and infinite-KL counts. One infinite KL observation makes the arithmetic mean infinite; the median depends on the full ordered sample and can remain finite.
+The table reports mean overlap, mean JSD, mean KL, Top-1 agreement, and the number of comparison origins. Column-heading tooltips explain the measures and comparison directions. In live mode, the expandable **Latest forecast** section shows the latest-candle comparison. One infinite KL observation makes the arithmetic mean infinite.
 
-Rankings are reported independently by highest mean overlap, lowest mean JSD, lowest mean KL, and highest Top-1 agreement. They use the timestamp intersection shared by all three comparison models, so unequal data coverage does not silently determine the ranking. No weighted combined score is produced. Ties are displayed, and divergent rankings are explained according to the metrics' different definitions.
+Higher mean overlap and Top-1 agreement indicate greater similarity to A. Lower mean JSD and mean KL indicate greater similarity. Counts describe data coverage rather than model quality; use matching timestamp coverage for comparisons. The dashboard shows the values and tooltips without a separate ranking table or weighted combined score.
 
 Historical 2025 counts are **Compared candles** from the fitted quarterly models. Live counts are **Forecast candles** from aligned closed origins. The separate latest live table can include the current provisional candle and always refers to the latest forecast, even when the chart is panned backward.
 
-**Code:** [forecast_comparison.py](src/HMM/forecast_comparison.py), `modelAgreement()`, `windowForecastMetrics()`, `rankForecastMetrics()`, and `updateComparisonAgreement()` in [dashboard.html](src/HMM/dashboard.html).
+**Code:** [forecast_comparison.py](src/HMM/forecast_comparison.py), `modelAgreement()`, `windowForecastMetrics()`, and `updateComparisonAgreement()` in [dashboard.html](src/HMM/dashboard.html).
 
 ## 15. Log-likelihood: what we calculated and showed
 
@@ -405,7 +404,7 @@ This recorded validation example shows that B was closest to A under these four 
 
 ## 18. Part K: What was checked
 
-At the latest implementation validation, **17 Python tests and 10 Node tests passed**. The automated checks cover:
+The automated suite contains **17 Python tests and 9 Node tests**. The checks cover:
 
 - Identical, disjoint, asymmetric, normalized, and invalid probability-vector cases.
 - JSD bounds and symmetry, directional KL, exact zeros, and infinite-KL statistics/serialization.
@@ -414,7 +413,7 @@ At the latest implementation validation, **17 Python tests and 10 Node tests pas
 - Streaming filter context and repeated provisional-candle updates.
 - Live training-cutoff safeguards and explicit separation from in-sample quarterly comparisons.
 - Reuse of the existing quarterly fits, with failed fits kept as comparison gaps.
-- Agreement counts, visible-window statistics, shared-sample rankings, and latest-versus-average separation.
+- Agreement counts, visible-window statistics, and latest-versus-average separation.
 - The 2025 default selection, optional live loading, automatic coin refresh, and four-chart mode switching.
 
 Additional validation checked all 12 coin/interval selections against the 48 saved annual bundles using copied price/volume fixtures with synthetic post-training dates. Those fixtures tested software behavior; they are not empirical market-performance results. The current document's coverage audit checked actual raw timestamps, counts, and stored artifact counts. No new training was needed to prepare this summary.
@@ -466,7 +465,7 @@ The regime count was predefined; there are no externally supplied true regime la
 | `src/HMM/data/models/2025/` | The 48 fitted annual HMM/scaler bundles. |
 | [forecast_comparison.py](src/HMM/forecast_comparison.py) | Causal filtering, probability alignment, distribution comparison, and infinity handling. |
 | [server.py](src/HMM/server.py) | Flask APIs, dashboard feature/training implementation, saved-model loading, and historical/live inference. |
-| [dashboard.html](src/HMM/dashboard.html) | Controls, four price charts, agreement/divergence tables, rankings, and live stream handling. |
+| [dashboard.html](src/HMM/dashboard.html) | Controls, four price charts, agreement/divergence tables and tooltips, and live stream handling. |
 | [update_model_guide.py](src/HMM/update_model_guide.py) | Refreshes the guide's annual profiles and processed quarterly comparison tables. |
 | [MODEL_GUIDE.md](MODEL_GUIDE.md) | Detailed model explanations, SOP discussion, and complete profile tables. |
 | `src/HMM/tests/` | Automated probability, inference, API, and dashboard checks. |
