@@ -42,3 +42,7 @@ next-env.d.ts
 
 # fitted 2025 HMM bundles (generated locally)
 /src/HMM/data/models/
+
+# generated screenshot artifacts and exact application response cache
+/screenshots/regime_comparison/
+/screenshots/.regime_response_cache/

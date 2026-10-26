@@ -45,3 +45,28 @@ python -B src/HMM/update_model_guide.py
 These refresh 48 annual saved models, fit all 192 quarterly combinations, and update the guide's tables for BTC, ETH, DOGE, and LTC at 5m, 15m, and 30m. Both training commands default to all coins and intervals. The batch accepts `--coin`, `--tf`, and `--quarter` for smaller selections and preserves unselected summary entries.
 
 Quarterly candle files and state statistics are in `src/HMM/data/processed/`. BTC keeps filenames such as `hmm_15m_Q1_ModelA.json`; other coins use prefixes such as `hmm_eth_15m_Q1_ModelA.json`. The combined summary identifies each fit and includes explicit errors for failed fits. Training uses the existing 2025 raw dataset.
+
+## Regime Comparison screenshots
+
+The screenshot script uses [Playwright's element screenshots](https://playwright.dev/python/docs/screenshots#element-screenshot) on `#panel-regimes`, including the comparison table and all four model charts. It excludes the surrounding application controls and other panels. Images use a 2x pixel scale and include the entire section even when it extends below the viewport.
+
+Install the capture dependencies and Chromium, start the existing Flask dashboard, then run from the repository root:
+
+```bash
+.venv/bin/python -m pip install -r src/HMM/requirements-screenshots.txt
+.venv/bin/python -m playwright install chromium
+# In another terminal: .venv/bin/python -B src/HMM/server.py
+.venv/bin/python -B scripts/capture_regime_comparison.py --allow-analysis
+```
+
+The default set is **BTC, ETH, DOGE, and LTC**, as supported by the application: 4 coins × 4 quarters × 3 intervals = 48 images. ETH replaces the originally requested BNB; BNB currently has no dashboard control or data. Filenames follow `screenshots/regime_comparison/BTC/Q1/BTC_Q1_5m.png`. `capture_report.json` and `capture.log` in that directory record successes, failures, image checksums, quarter ranges, and response provenance. Any failed configuration is logged while capture continues; the command exits with status 1 if any configuration fails.
+
+`--allow-analysis` permits the normal `/api/run` workflow once per uncached coin/interval. It refits models in memory but does not write raw data, processed results, or saved model bundles. The script saves the **unchanged API response bytes** under `screenshots/.regime_response_cache/`, then replays them during browser selection; it does not reconstruct metrics from exports or substitute generated values. Input and analysis-code checksums invalidate stale caches. For future captures without fitting, omit the flag:
+
+```bash
+.venv/bin/python -B scripts/capture_regime_comparison.py
+# Optional subset or a dashboard running elsewhere:
+.venv/bin/python -B scripts/capture_regime_comparison.py --coins BTC --quarters Q2 --intervals 15m --base-url http://localhost:5050
+```
+
+The script verifies response identity, actual model assignments and probability-comparison coverage, completed Chart.js rendering, selected quarter bounds, section dimensions, PNG integrity, and duplicate images/data. Missing or failed model fits fail that screenshot rather than count an incomplete image as successful. It uses the quarter boundaries stored by the application (currently calendar quarters in UTC+8). Generated images and response caches are ignored by Git.
